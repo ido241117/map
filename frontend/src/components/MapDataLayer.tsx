@@ -5,7 +5,10 @@ import { fetchParcels, type ParcelQuery } from '../api';
 import type { Parcel, ParcelListResponse } from '../types';
 
 const GEOMETRY_ZOOM = 14;
-const DEBOUNCE_MS = 400;
+const DEBOUNCE_MS = 300;
+const PARCEL_LIMIT = 5000;
+const MARKER_CHUNK = 600;
+const GEOMETRY_CHUNK = 200;
 
 const POLYGON_STYLE: L.PathOptions = {
   color: '#14532d',
@@ -59,9 +62,12 @@ export function MapDataLayer({
 }: MapDataLayerProps) {
   const map = useMap();
   const layerRef = useRef<L.LayerGroup | null>(null);
+  const pointRendererRef = useRef(L.canvas({ padding: 0.25 }));
+  const polygonRendererRef = useRef(L.canvas({ padding: 0.35 }));
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<number | null>(null);
   const requestIdRef = useRef(0);
+  const renderGenRef = useRef(0);
   const lastFetchKeyRef = useRef('');
   const suppressEventsRef = useRef(false);
 
@@ -82,37 +88,68 @@ export function MapDataLayer({
     }
 
     const group = layerRef.current;
+    const gen = ++renderGenRef.current;
     group.clearLayers();
 
     if (showGeometry) {
-      const features = parcels
-        .filter((p) => p.geometry_json)
-        .map((p) => ({
-          type: 'Feature' as const,
-          properties: p,
-          geometry: p.geometry_json!,
-        }));
+      const withGeometry = parcels.filter((p) => p.geometry_json);
+      if (!withGeometry.length) return;
 
-      if (features.length) {
+      let index = 0;
+      const renderer = polygonRendererRef.current;
+
+      const step = () => {
+        if (gen !== renderGenRef.current) return;
+
+        const end = Math.min(index + GEOMETRY_CHUNK, withGeometry.length);
+        const chunk = withGeometry.slice(index, end);
+        index = end;
+
         const collection: GeoJSON.FeatureCollection = {
           type: 'FeatureCollection',
-          features,
+          features: chunk.map((p) => ({
+            type: 'Feature' as const,
+            properties: p,
+            geometry: p.geometry_json!,
+          })),
         };
+
         L.geoJSON(collection, {
-          style: () => POLYGON_STYLE,
+          style: () => ({ ...POLYGON_STYLE, renderer }),
           onEachFeature: (feature, layer) => {
             layer.bindPopup(popupHtml(feature.properties as Parcel), { maxWidth: 320 });
           },
         }).addTo(group);
-      }
+
+        if (index < withGeometry.length) {
+          requestAnimationFrame(step);
+        }
+      };
+
+      requestAnimationFrame(step);
       return;
     }
 
-    for (const parcel of parcels) {
-      L.circleMarker([parcel.latitude, parcel.longitude], MARKER_STYLE)
-        .bindPopup(popupHtml(parcel), { maxWidth: 320 })
-        .addTo(group);
-    }
+    const renderer = pointRendererRef.current;
+    let index = 0;
+
+    const step = () => {
+      if (gen !== renderGenRef.current) return;
+
+      const end = Math.min(index + MARKER_CHUNK, parcels.length);
+      for (; index < end; index += 1) {
+        const parcel = parcels[index];
+        L.circleMarker([parcel.latitude, parcel.longitude], { ...MARKER_STYLE, renderer })
+          .bindPopup(popupHtml(parcel), { maxWidth: 320 })
+          .addTo(group);
+      }
+
+      if (index < parcels.length) {
+        requestAnimationFrame(step);
+      }
+    };
+
+    requestAnimationFrame(step);
   }, [map]);
 
   const runFetch = useCallback(async () => {
@@ -132,6 +169,7 @@ export function MapDataLayer({
       minLng: bounds.getWest().toFixed(6),
       maxLng: bounds.getEast().toFixed(6),
       includeGeometry: showGeometry ? 'true' : 'false',
+      limit: String(PARCEL_LIMIT),
     };
 
     const fetchKey = JSON.stringify(query);
@@ -191,6 +229,7 @@ export function MapDataLayer({
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       abortRef.current?.abort();
+      renderGenRef.current += 1;
       if (layerRef.current) {
         layerRef.current.remove();
         layerRef.current = null;

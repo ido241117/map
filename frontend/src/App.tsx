@@ -174,7 +174,7 @@ function App() {
         </section>
 
         <p className="hint">
-          Dữ liệu tải theo vùng bản đồ. Zoom ≥ {14} để xem ranh thửa, zoom thấp hơn hiển thị điểm.
+          Dữ liệu tải theo vùng bản đồ (tối đa 5.000 thửa). Zoom ≥ 14 để xem ranh thửa, zoom thấp hơn hiển thị điểm.
         </p>
 
         {error ? <div className="error">{error}</div> : null}
@@ -196,10 +196,20 @@ function App() {
           <span>API: /api → :3001</span>
         </div>
 
-        <MapContainer center={HCM_CENTER} zoom={12} className="map" preferCanvas>
+        <MapContainer
+          center={HCM_CENTER}
+          zoom={12}
+          className="map"
+          preferCanvas
+          zoomAnimation={false}
+          fadeAnimation={false}
+          markerZoomAnimation={false}
+        >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; CARTO'
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            updateWhenIdle
+            updateWhenZooming={false}
           />
           <MapDataLayer
             filters={activeFilters}

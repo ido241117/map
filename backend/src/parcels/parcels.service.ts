@@ -29,6 +29,8 @@ type StatsResponse = {
 };
 
 const STATS_TTL_MS = 10 * 60 * 1000;
+const PARCEL_MAX_LIMIT = 5000;
+const SEARCH_MAX_LIMIT = 200;
 
 @Injectable()
 export class ParcelsService {
@@ -76,16 +78,16 @@ export class ParcelsService {
     }
 
     const includeGeometry = filters.includeGeometry ?? false;
-    const defaultLimit = filters.q?.trim()
-      ? 100
-      : includeGeometry
-        ? 800
-        : 3000;
-    const maxLimit = includeGeometry ? 2000 : 5000;
-    const limit = Math.min(Math.max(filters.limit || defaultLimit, 1), maxLimit);
+    const isSearch = Boolean(filters.q?.trim());
+    const defaultLimit = isSearch ? SEARCH_MAX_LIMIT : PARCEL_MAX_LIMIT;
+    const limit = Math.min(
+      Math.max(filters.limit || defaultLimit, 1),
+      isSearch ? SEARCH_MAX_LIMIT : PARCEL_MAX_LIMIT,
+    );
 
     const geometryColumn = includeGeometry ? ', geometry_json' : '';
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const orderSql = isSearch ? 'ORDER BY id' : '';
 
     const { rows } = await this.db.query(
       `
@@ -105,7 +107,7 @@ export class ParcelsService {
         ${geometryColumn}
       FROM land_parcels
       ${whereSql}
-      ORDER BY id
+      ${orderSql}
       LIMIT ${addParam(limit + 1)}
       `,
       params,
