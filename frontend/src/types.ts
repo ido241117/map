@@ -11,7 +11,13 @@ export type Parcel = {
   district: string;
   ward: string;
   property_uuid: string;
-  geometry_json: GeoJSON.MultiPolygon;
+  geometry_json?: GeoJSON.MultiPolygon;
+};
+
+export type ParcelListResponse = {
+  items: Parcel[];
+  truncated: boolean;
+  returned: number;
 };
 
 export type Stats = {
@@ -24,4 +30,11 @@ export type Stats = {
   districts: Array<{ district: string; count: number }>;
   landTypes: Array<{ planning_land_type: string; count: number }>;
   wards: Array<{ district: string; ward: string; count: number }>;
+};
+
+export type MapBounds = {
+  minLat: number;
+  maxLat: number;
+  minLng: number;
+  maxLng: number;
 };

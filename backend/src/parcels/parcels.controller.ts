@@ -18,6 +18,11 @@ export class ParcelsController {
     @Query('landType') landType?: string,
     @Query('minArea') minArea?: string,
     @Query('maxArea') maxArea?: string,
+    @Query('minLat') minLat?: string,
+    @Query('maxLat') maxLat?: string,
+    @Query('minLng') minLng?: string,
+    @Query('maxLng') maxLng?: string,
+    @Query('includeGeometry') includeGeometry?: string,
     @Query('limit') limit?: string,
   ) {
     return this.parcelsService.list({
@@ -27,6 +32,11 @@ export class ParcelsController {
       landType,
       minArea: minArea ? Number(minArea) : undefined,
       maxArea: maxArea ? Number(maxArea) : undefined,
+      minLat: minLat ? Number(minLat) : undefined,
+      maxLat: maxLat ? Number(maxLat) : undefined,
+      minLng: minLng ? Number(minLng) : undefined,
+      maxLng: maxLng ? Number(maxLng) : undefined,
+      includeGeometry: includeGeometry === 'true',
       limit: limit ? Number(limit) : undefined,
     });
   }

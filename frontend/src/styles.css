@@ -169,6 +169,17 @@ button {
   font-size: 13px;
 }
 
+.hint {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #f0f9ff;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .map-shell {
   position: relative;
   min-width: 0;

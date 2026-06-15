@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "nest start --watch",
+    "stop": "powershell -ExecutionPolicy Bypass -File ../scripts/kill-port.ps1 -Port 3001",
     "start": "node dist/main.js",
     "build": "nest build",
     "lint": "tsc --noEmit"

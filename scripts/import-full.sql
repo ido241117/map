@@ -91,8 +91,10 @@ DROP TABLE land_parcels_staging;
 \echo 'Creating indexes...'
 CREATE INDEX land_parcels_lat_lng_idx ON land_parcels (latitude, longitude);
 CREATE INDEX land_parcels_property_code_idx ON land_parcels (property_code);
+CREATE INDEX land_parcels_property_uuid_idx ON land_parcels (property_uuid);
 CREATE INDEX land_parcels_admin_idx ON land_parcels (district, ward);
 CREATE INDEX land_parcels_land_type_idx ON land_parcels (planning_land_type);
+CREATE INDEX land_parcels_total_area_idx ON land_parcels (total_area);
 
 CREATE TABLE IF NOT EXISTS db_meta (
   key TEXT PRIMARY KEY,

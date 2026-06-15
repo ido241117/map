@@ -8,11 +8,32 @@ type ParcelFilters = {
   landType?: string;
   minArea?: number;
   maxArea?: number;
+  minLat?: number;
+  maxLat?: number;
+  minLng?: number;
+  maxLng?: number;
+  includeGeometry?: boolean;
   limit?: number;
 };
 
+type StatsResponse = {
+  summary: {
+    parcel_count: number;
+    avg_area: number;
+    min_area: number;
+    max_area: number;
+  };
+  districts: Array<{ district: string; count: number }>;
+  landTypes: Array<{ planning_land_type: string; count: number }>;
+  wards: Array<{ district: string; ward: string; count: number }>;
+};
+
+const STATS_TTL_MS = 10 * 60 * 1000;
+
 @Injectable()
 export class ParcelsService {
+  private statsCache: { data: StatsResponse; expiresAt: number } | null = null;
+
   constructor(private readonly db: DatabaseService) {}
 
   async list(filters: ParcelFilters) {
@@ -41,7 +62,29 @@ export class ParcelsService {
     if (Number.isFinite(filters.maxArea))
       where.push(`total_area <= ${addParam(filters.maxArea)}`);
 
-    const limit = Math.min(Math.max(filters.limit || 300, 1), 10000);
+    const hasBbox =
+      Number.isFinite(filters.minLat) &&
+      Number.isFinite(filters.maxLat) &&
+      Number.isFinite(filters.minLng) &&
+      Number.isFinite(filters.maxLng);
+
+    if (hasBbox) {
+      where.push(`latitude >= ${addParam(filters.minLat)}`);
+      where.push(`latitude <= ${addParam(filters.maxLat)}`);
+      where.push(`longitude >= ${addParam(filters.minLng)}`);
+      where.push(`longitude <= ${addParam(filters.maxLng)}`);
+    }
+
+    const includeGeometry = filters.includeGeometry ?? false;
+    const defaultLimit = filters.q?.trim()
+      ? 100
+      : includeGeometry
+        ? 800
+        : 3000;
+    const maxLimit = includeGeometry ? 2000 : 5000;
+    const limit = Math.min(Math.max(filters.limit || defaultLimit, 1), maxLimit);
+
+    const geometryColumn = includeGeometry ? ', geometry_json' : '';
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const { rows } = await this.db.query(
@@ -58,17 +101,20 @@ export class ParcelsService {
         province,
         district,
         ward,
-        property_uuid,
-        geometry_json
+        property_uuid
+        ${geometryColumn}
       FROM land_parcels
       ${whereSql}
       ORDER BY id
-      LIMIT ${addParam(limit)}
+      LIMIT ${addParam(limit + 1)}
       `,
       params,
     );
 
-    return rows;
+    const truncated = rows.length > limit;
+    const items = truncated ? rows.slice(0, limit) : rows;
+
+    return { items, truncated, returned: items.length };
   }
 
   async getById(id: number) {
@@ -84,6 +130,17 @@ export class ParcelsService {
   }
 
   async stats() {
+    const now = Date.now();
+    if (this.statsCache && this.statsCache.expiresAt > now) {
+      return this.statsCache.data;
+    }
+
+    const data = await this.loadStats();
+    this.statsCache = { data, expiresAt: now + STATS_TTL_MS };
+    return data;
+  }
+
+  private async loadStats(): Promise<StatsResponse> {
     const [summary, districts, landTypes, wards] = await Promise.all([
       this.db.query(`
         SELECT
@@ -114,10 +171,10 @@ export class ParcelsService {
     ]);
 
     return {
-      summary: summary.rows[0],
-      districts: districts.rows,
-      landTypes: landTypes.rows,
-      wards: wards.rows,
+      summary: summary.rows[0] as StatsResponse['summary'],
+      districts: districts.rows as StatsResponse['districts'],
+      landTypes: landTypes.rows as StatsResponse['landTypes'],
+      wards: wards.rows as StatsResponse['wards'],
     };
   }
 }

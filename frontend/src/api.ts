@@ -1,6 +1,6 @@
-import type { Parcel, Stats } from './types';
+import type { ParcelListResponse, Stats } from './types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export type ParcelQuery = {
   q?: string;
@@ -9,6 +9,11 @@ export type ParcelQuery = {
   landType?: string;
   minArea?: string;
   maxArea?: string;
+  minLat?: string;
+  maxLat?: string;
+  minLng?: string;
+  maxLng?: string;
+  includeGeometry?: string;
   limit?: string;
 };
 
@@ -22,9 +27,12 @@ function toQueryString(query: ParcelQuery) {
   return params.toString();
 }
 
-export async function fetchParcels(query: ParcelQuery): Promise<Parcel[]> {
+export async function fetchParcels(
+  query: ParcelQuery,
+  signal?: AbortSignal,
+): Promise<ParcelListResponse> {
   const qs = toQueryString(query);
-  const response = await fetch(`${API_URL}/parcels${qs ? `?${qs}` : ''}`);
+  const response = await fetch(`${API_URL}/parcels${qs ? `?${qs}` : ''}`, { signal });
   if (!response.ok) throw new Error('Không tải được danh sách thửa đất');
   return response.json();
 }
