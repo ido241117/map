@@ -1,0 +1,28 @@
+{
+  "name": "hcm-land-map-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "db:setup": "psql -U postgres -h localhost -p 5432 -f scripts/setup-db.sql",
+    "db:status": "node scripts/db-status.js",
+    "db:restore": "node scripts/restore-db.js",
+    "db:export": "node scripts/export-db.js",
+    "db:import": "node scripts/import-full.js",
+    "db:import:force": "node scripts/import-full.js --force",
+    "dev": "npm run dev --workspace backend",
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend"
+  },
+  "dependencies": {
+    "papaparse": "^5.5.3",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
