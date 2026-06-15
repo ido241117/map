@@ -28,6 +28,11 @@ function App() {
     [filters, debouncedSearch],
   );
 
+  const filtersVersion = useMemo(
+    () => JSON.stringify(activeFilters),
+    [activeFilters],
+  );
+
   useEffect(() => {
     fetchStats()
       .then(setStats)
@@ -198,6 +203,7 @@ function App() {
           />
           <MapDataLayer
             filters={activeFilters}
+            filtersVersion={filtersVersion}
             onUpdate={(result, zoom) => {
               setMapResult(result);
               setMapZoom(zoom);
