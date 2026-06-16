@@ -1,10 +1,12 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Public } from '../auth/public.decorator';
 import { ParcelsService } from './parcels.service';
 
 @Controller()
 export class ParcelsController {
   constructor(private readonly parcelsService: ParcelsService) {}
 
+  @Public()
   @Get('health')
   health() {
     return { ok: true };
@@ -12,6 +14,7 @@ export class ParcelsController {
 
   @Get('parcels')
   listParcels(
+    @Query('source') source?: string,
     @Query('q') q?: string,
     @Query('district') district?: string,
     @Query('ward') ward?: string,
@@ -26,6 +29,7 @@ export class ParcelsController {
     @Query('limit') limit?: string,
   ) {
     return this.parcelsService.list({
+      source,
       q,
       district,
       ward,
@@ -41,13 +45,22 @@ export class ParcelsController {
     });
   }
 
+  @Get('parcels/address-suggest')
+  suggestAddress(
+    @Query('source') source?: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.parcelsService.suggestAddress(source, q || '', limit ? Number(limit) : undefined);
+  }
+
   @Get('parcels/:id')
-  getParcel(@Param('id') id: string) {
-    return this.parcelsService.getById(Number(id));
+  getParcel(@Param('id') id: string, @Query('source') source?: string) {
+    return this.parcelsService.getById(Number(id), source);
   }
 
   @Get('stats')
-  stats() {
-    return this.parcelsService.stats();
+  stats(@Query('source') source?: string) {
+    return this.parcelsService.stats(source);
   }
 }

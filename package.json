@@ -8,17 +8,26 @@
   ],
   "scripts": {
     "db:setup": "psql -U postgres -h localhost -p 5432 -f scripts/setup-db.sql",
+    "db:setup:auth": "node scripts/setup-auth.js",
     "db:status": "node scripts/db-status.js",
     "db:restore": "node scripts/restore-db.js",
     "db:export": "node scripts/export-db.js",
     "db:import": "node scripts/import-full.js",
     "db:import:force": "node scripts/import-full.js --force",
+    "db:import:property-buys": "node scripts/import-property-buys.js",
+    "db:import:guland": "node scripts/import-guland-hcm-land.js",
+    "es:up": "docker compose -f docker-compose.elasticsearch.yml up -d",
+    "es:down": "docker compose -f docker-compose.elasticsearch.yml down",
+    "es:wait": "node scripts/wait-elasticsearch.js",
+    "es:index": "node scripts/index-parcels-es.js",
+    "es:setup": "npm run es:up && npm run es:wait && npm run es:index",
     "dev": "npm run dev --workspace backend",
     "dev:backend": "npm run dev --workspace backend",
     "dev:frontend": "npm run dev --workspace frontend",
     "build": "npm run build --workspace backend && npm run build --workspace frontend"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^8.17.0",
     "papaparse": "^5.5.3",
     "pg": "^8.13.1"
   },

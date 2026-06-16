@@ -31,6 +31,11 @@ function formatNumber(value: number | string | undefined) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0));
 }
 
+const POPUP_OPTIONS: L.PopupOptions = {
+  maxWidth: 320,
+  autoPan: false,
+};
+
 function popupHtml(parcel: Parcel) {
   return `
     <div class="popup">
@@ -43,11 +48,15 @@ function popupHtml(parcel: Parcel) {
   `;
 }
 
+function isMapPopupOpen(map: L.Map) {
+  const popup = (map as L.Map & { _popup?: L.Popup })._popup;
+  return Boolean(popup?.isOpen());
+}
+
 type MapDataLayerProps = {
   filters: Omit<ParcelQuery, 'minLat' | 'maxLat' | 'minLng' | 'maxLng' | 'includeGeometry'>;
   filtersVersion: string;
   onUpdate: (result: ParcelListResponse, zoom: number) => void;
-  onLoading: (loading: boolean) => void;
   onError: (message: string) => void;
   fitToResults?: boolean;
 };
@@ -56,7 +65,6 @@ export function MapDataLayer({
   filters,
   filtersVersion,
   onUpdate,
-  onLoading,
   onError,
   fitToResults = false,
 }: MapDataLayerProps) {
@@ -69,14 +77,14 @@ export function MapDataLayer({
   const requestIdRef = useRef(0);
   const renderGenRef = useRef(0);
   const lastFetchKeyRef = useRef('');
+  const lastRenderedKeyRef = useRef('');
   const suppressEventsRef = useRef(false);
+  const pendingAfterPopupRef = useRef(false);
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
   const onUpdateRef = useRef(onUpdate);
   onUpdateRef.current = onUpdate;
-  const onLoadingRef = useRef(onLoading);
-  onLoadingRef.current = onLoading;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const fitToResultsRef = useRef(fitToResults);
@@ -117,7 +125,7 @@ export function MapDataLayer({
         L.geoJSON(collection, {
           style: () => ({ ...POLYGON_STYLE, renderer }),
           onEachFeature: (feature, layer) => {
-            layer.bindPopup(popupHtml(feature.properties as Parcel), { maxWidth: 320 });
+            layer.bindPopup(popupHtml(feature.properties as Parcel), POPUP_OPTIONS);
           },
         }).addTo(group);
 
@@ -140,7 +148,7 @@ export function MapDataLayer({
       for (; index < end; index += 1) {
         const parcel = parcels[index];
         L.circleMarker([parcel.latitude, parcel.longitude], { ...MARKER_STYLE, renderer })
-          .bindPopup(popupHtml(parcel), { maxWidth: 320 })
+          .bindPopup(popupHtml(parcel), POPUP_OPTIONS)
           .addTo(group);
       }
 
@@ -162,21 +170,26 @@ export function MapDataLayer({
     const showGeometry = zoom >= GEOMETRY_ZOOM;
     const current = filtersRef.current;
 
+    const isAddressSearch = Boolean(current.q?.trim());
+
     const query: ParcelQuery = {
       ...current,
-      minLat: bounds.getSouth().toFixed(6),
-      maxLat: bounds.getNorth().toFixed(6),
-      minLng: bounds.getWest().toFixed(6),
-      maxLng: bounds.getEast().toFixed(6),
+      ...(isAddressSearch
+        ? {}
+        : {
+            minLat: bounds.getSouth().toFixed(4),
+            maxLat: bounds.getNorth().toFixed(4),
+            minLng: bounds.getWest().toFixed(4),
+            maxLng: bounds.getEast().toFixed(4),
+          }),
       includeGeometry: showGeometry ? 'true' : 'false',
-      limit: String(PARCEL_LIMIT),
+      limit: isAddressSearch ? '200' : String(PARCEL_LIMIT),
     };
 
     const fetchKey = JSON.stringify(query);
     if (fetchKey === lastFetchKeyRef.current) return;
 
     const requestId = ++requestIdRef.current;
-    onLoadingRef.current(true);
     onErrorRef.current('');
 
     try {
@@ -184,8 +197,12 @@ export function MapDataLayer({
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
 
       lastFetchKeyRef.current = fetchKey;
-      renderParcels(result.items, showGeometry);
       onUpdateRef.current(result, zoom);
+
+      if (fetchKey !== lastRenderedKeyRef.current) {
+        lastRenderedKeyRef.current = fetchKey;
+        renderParcels(result.items, showGeometry);
+      }
 
       if (fitToResultsRef.current && result.items.length) {
         suppressEventsRef.current = true;
@@ -201,29 +218,47 @@ export function MapDataLayer({
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       if (err instanceof DOMException && err.name === 'AbortError') return;
       onErrorRef.current(err instanceof Error ? err.message : 'Lỗi tải dữ liệu');
-    } finally {
-      if (requestId === requestIdRef.current) {
-        onLoadingRef.current(false);
-      }
     }
   }, [map, renderParcels]);
 
+  const runFetchRef = useRef(runFetch);
+  runFetchRef.current = runFetch;
+
   const scheduleFetch = useCallback(() => {
     if (suppressEventsRef.current) return;
+
+    if (isMapPopupOpen(map)) {
+      if (!pendingAfterPopupRef.current) {
+        pendingAfterPopupRef.current = true;
+        map.once('popupclose', () => {
+          pendingAfterPopupRef.current = false;
+          scheduleFetchRef.current();
+        });
+      }
+      return;
+    }
+
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
-      void runFetch();
+      void runFetchRef.current();
     }, DEBOUNCE_MS);
-  }, [runFetch]);
+  }, [map]);
+
+  const scheduleFetchRef = useRef(scheduleFetch);
+  scheduleFetchRef.current = scheduleFetch;
 
   useMapEvents({
-    moveend: scheduleFetch,
+    moveend: () => scheduleFetchRef.current(),
   });
 
   useEffect(() => {
     lastFetchKeyRef.current = '';
-    scheduleFetch();
-  }, [filtersVersion, scheduleFetch]);
+    lastRenderedKeyRef.current = '';
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      void runFetchRef.current();
+    }, DEBOUNCE_MS);
+  }, [filtersVersion]);
 
   useEffect(() => {
     return () => {

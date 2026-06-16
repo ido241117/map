@@ -1,7 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ParcelSearchService } from '../search/parcel-search.service';
 import { DatabaseService } from '../shared/database.service';
+import {
+  geometryColumnForSource,
+  parseParcelSource,
+  SOURCE_SQL,
+  type ParcelSource,
+} from './parcel-sources';
 
 type ParcelFilters = {
+  source?: string;
   q?: string;
   district?: string;
   ward?: string;
@@ -17,6 +25,7 @@ type ParcelFilters = {
 };
 
 type StatsResponse = {
+  source: ParcelSource;
   summary: {
     parcel_count: number;
     avg_area: number;
@@ -34,37 +43,64 @@ const SEARCH_MAX_LIMIT = 200;
 
 @Injectable()
 export class ParcelsService {
-  private statsCache: { data: StatsResponse; expiresAt: number } | null = null;
+  private statsCache = new Map<ParcelSource, { data: StatsResponse; expiresAt: number }>();
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly parcelSearch: ParcelSearchService,
+  ) {}
 
   async list(filters: ParcelFilters) {
+    const source = parseParcelSource(filters.source);
+    const config = SOURCE_SQL[source];
     const where: string[] = [];
     const params: unknown[] = [];
+    const isSearch = Boolean(filters.q?.trim());
 
     const addParam = (value: unknown) => {
       params.push(value);
       return `$${params.length}`;
     };
 
-    if (filters.q?.trim()) {
-      const token = `%${filters.q.trim()}%`;
+    if (isSearch) {
+      const esIds = await this.parcelSearch.searchIds({
+        source,
+        q: filters.q!.trim(),
+        district: filters.district,
+        ward: filters.ward,
+        limit: SEARCH_MAX_LIMIT,
+      });
+
+      if (esIds) {
+        if (!esIds.length) {
+          return { source, items: [], truncated: false, returned: 0 };
+        }
+        return this.listByIds(source, esIds, filters);
+      }
+
+      const token = `%${filters.q!.trim()}%`;
       const param = addParam(token);
-      where.push(
-        `(address ILIKE ${param} OR property_code ILIKE ${param} OR property_uuid ILIKE ${param})`,
-      );
+      where.push(config.searchClause.replace(/\$SEARCH/g, param));
     }
 
-    if (filters.district) where.push(`district = ${addParam(filters.district)}`);
-    if (filters.ward) where.push(`ward = ${addParam(filters.ward)}`);
-    if (filters.landType)
-      where.push(`planning_land_type = ${addParam(filters.landType)}`);
-    if (Number.isFinite(filters.minArea))
+    if (filters.district) {
+      where.push(`${config.districtColumn} = ${addParam(filters.district)}`);
+    }
+    if (filters.ward) {
+      where.push(`${config.wardColumn} = ${addParam(filters.ward)}`);
+    }
+    if (filters.landType) {
+      where.push(`${config.landTypeColumn} = ${addParam(filters.landType)}`);
+    }
+    if (Number.isFinite(filters.minArea)) {
       where.push(`total_area >= ${addParam(filters.minArea)}`);
-    if (Number.isFinite(filters.maxArea))
+    }
+    if (Number.isFinite(filters.maxArea)) {
       where.push(`total_area <= ${addParam(filters.maxArea)}`);
+    }
 
     const hasBbox =
+      !isSearch &&
       Number.isFinite(filters.minLat) &&
       Number.isFinite(filters.maxLat) &&
       Number.isFinite(filters.minLng) &&
@@ -78,34 +114,22 @@ export class ParcelsService {
     }
 
     const includeGeometry = filters.includeGeometry ?? false;
-    const isSearch = Boolean(filters.q?.trim());
     const defaultLimit = isSearch ? SEARCH_MAX_LIMIT : PARCEL_MAX_LIMIT;
     const limit = Math.min(
       Math.max(filters.limit || defaultLimit, 1),
       isSearch ? SEARCH_MAX_LIMIT : PARCEL_MAX_LIMIT,
     );
 
-    const geometryColumn = includeGeometry ? ', geometry_json' : '';
+    const geometryColumn = includeGeometry ? geometryColumnForSource(source) : '';
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const orderSql = isSearch ? 'ORDER BY id' : '';
 
     const { rows } = await this.db.query(
       `
       SELECT
-        id,
-        shape_file_id,
-        property_code,
-        address,
-        latitude,
-        longitude,
-        total_area,
-        planning_land_type,
-        province,
-        district,
-        ward,
-        property_uuid
+        ${config.selectColumns}
         ${geometryColumn}
-      FROM land_parcels
+      FROM ${config.table}
       ${whereSql}
       ${orderSql}
       LIMIT ${addParam(limit + 1)}
@@ -116,14 +140,81 @@ export class ParcelsService {
     const truncated = rows.length > limit;
     const items = truncated ? rows.slice(0, limit) : rows;
 
-    return { items, truncated, returned: items.length };
+    return { source, items, truncated, returned: items.length };
   }
 
-  async getById(id: number) {
-    if (!Number.isFinite(id)) throw new NotFoundException('Parcel not found');
+  async suggestAddress(sourceInput: string | undefined, q: string, limit?: number) {
+    const source = parseParcelSource(sourceInput);
+    const items = await this.parcelSearch.suggest({ source, q, limit });
+    return {
+      source,
+      items: items ?? [],
+      engine: items ? 'elasticsearch' : 'unavailable',
+    };
+  }
+
+  private async listByIds(source: ParcelSource, ids: number[], filters: ParcelFilters) {
+    const config = SOURCE_SQL[source];
+    const includeGeometry = filters.includeGeometry ?? false;
+    const geometryColumn = includeGeometry ? geometryColumnForSource(source) : '';
+    const where: string[] = [`id = ANY($1::int[])`];
+    const params: unknown[] = [ids];
+
+    const addParam = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    if (filters.landType) {
+      where.push(`${config.landTypeColumn} = ${addParam(filters.landType)}`);
+    }
+    if (Number.isFinite(filters.minArea)) {
+      where.push(`total_area >= ${addParam(filters.minArea)}`);
+    }
+    if (Number.isFinite(filters.maxArea)) {
+      where.push(`total_area <= ${addParam(filters.maxArea)}`);
+    }
+
+    const limit = Math.min(Math.max(filters.limit || SEARCH_MAX_LIMIT, 1), SEARCH_MAX_LIMIT);
+    params.push(ids);
 
     const { rows } = await this.db.query(
-      'SELECT * FROM land_parcels WHERE id = $1 LIMIT 1',
+      `
+      SELECT
+        ${config.selectColumns}
+        ${geometryColumn}
+      FROM ${config.table}
+      WHERE ${where.join(' AND ')}
+      ORDER BY array_position($${params.length}::int[], id)
+      LIMIT ${limit}
+      `,
+      params,
+    );
+
+    return {
+      source,
+      items: rows,
+      truncated: rows.length >= limit,
+      returned: rows.length,
+    };
+  }
+
+  async getById(id: number, sourceInput?: string) {
+    const source = parseParcelSource(sourceInput);
+    const config = SOURCE_SQL[source];
+
+    if (!Number.isFinite(id)) throw new NotFoundException('Parcel not found');
+
+    const geometryColumn = geometryColumnForSource(source);
+    const { rows } = await this.db.query(
+      `
+      SELECT
+        ${config.selectColumns}
+        ${geometryColumn}
+      FROM ${config.table}
+      WHERE id = $1
+      LIMIT 1
+      `,
       [id],
     );
 
@@ -131,18 +222,21 @@ export class ParcelsService {
     return rows[0];
   }
 
-  async stats() {
+  async stats(sourceInput?: string) {
+    const source = parseParcelSource(sourceInput);
     const now = Date.now();
-    if (this.statsCache && this.statsCache.expiresAt > now) {
-      return this.statsCache.data;
+    const cached = this.statsCache.get(source);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
     }
 
-    const data = await this.loadStats();
-    this.statsCache = { data, expiresAt: now + STATS_TTL_MS };
+    const data = await this.loadStats(source);
+    this.statsCache.set(source, { data, expiresAt: now + STATS_TTL_MS });
     return data;
   }
 
-  private async loadStats(): Promise<StatsResponse> {
+  private async loadStats(source: ParcelSource): Promise<StatsResponse> {
+    const config = SOURCE_SQL[source];
     const [summary, districts, landTypes, wards] = await Promise.all([
       this.db.query(`
         SELECT
@@ -150,29 +244,15 @@ export class ParcelsService {
           ROUND(AVG(total_area)::numeric, 2)::float AS avg_area,
           MIN(total_area)::float AS min_area,
           MAX(total_area)::float AS max_area
-        FROM land_parcels
+        FROM ${config.table}
       `),
-      this.db.query(`
-        SELECT district, COUNT(*)::int AS count
-        FROM land_parcels
-        GROUP BY district
-        ORDER BY count DESC, district
-      `),
-      this.db.query(`
-        SELECT planning_land_type, COUNT(*)::int AS count
-        FROM land_parcels
-        GROUP BY planning_land_type
-        ORDER BY count DESC, planning_land_type
-      `),
-      this.db.query(`
-        SELECT district, ward, COUNT(*)::int AS count
-        FROM land_parcels
-        GROUP BY district, ward
-        ORDER BY district, ward
-      `),
+      this.db.query(config.statsDistrictSql),
+      this.db.query(config.statsLandTypeSql),
+      this.db.query(config.statsWardSql),
     ]);
 
     return {
+      source,
       summary: summary.rows[0] as StatsResponse['summary'],
       districts: districts.rows as StatsResponse['districts'],
       landTypes: landTypes.rows as StatsResponse['landTypes'],
