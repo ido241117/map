@@ -1,10 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ParcelSearchService } from '../search/parcel-search.service';
 import { DatabaseService } from '../shared/database.service';
-import { OsmParcelsService } from './osm-parcels.service';
 import {
   geometryColumnForSource,
-  isOsmSource,
   parseParcelSource,
   SOURCE_SQL,
   type ParcelSource,
@@ -13,6 +11,9 @@ import {
   gridCellDegrees,
   mapViewportMode,
   shouldIncludeGeometry,
+  VIEWPORT_CLUSTER_LIMIT,
+  VIEWPORT_GEOMETRY_LIMIT,
+  VIEWPORT_MARKER_LIMIT,
 } from './map-viewport';
 
 type ParcelFilters = {
@@ -55,15 +56,10 @@ export class ParcelsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly parcelSearch: ParcelSearchService,
-    private readonly osmParcels: OsmParcelsService,
   ) {}
 
   async list(filters: ParcelFilters) {
     const source = parseParcelSource(filters.source);
-    if (isOsmSource(source)) {
-      return this.osmParcels.list(filters);
-    }
-
     const config = SOURCE_SQL[source];
     const where: string[] = [];
     const params: unknown[] = [];
@@ -135,7 +131,7 @@ export class ParcelsService {
       isSearch,
       filters.includeGeometry,
     );
-    const limit = this.resolveListLimit(filters, isSearch);
+    const limit = this.resolveListLimit(filters, isSearch, hasBbox, includeGeometry, viewportMode);
     const geometryColumn = includeGeometry ? geometryColumnForSource(source) : '';
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const orderSql = isSearch ? 'ORDER BY id' : '';
@@ -161,19 +157,27 @@ export class ParcelsService {
     return { source, mode: 'parcels' as const, items, clusters: [], truncated, returned: items.length };
   }
 
-  /** Search keeps a cap; map viewport loads all rows in bbox (no 5000 cap). */
-  private resolveListLimit(filters: ParcelFilters, isSearch: boolean): number | undefined {
+  /** Search keeps a cap; map viewport uses bounded limits for demo scale. */
+  private resolveListLimit(
+    filters: ParcelFilters,
+    isSearch: boolean,
+    hasBbox: boolean,
+    includeGeometry: boolean,
+    viewportMode: 'clusters' | 'parcels',
+  ): number | undefined {
     if (isSearch) {
       return Math.min(Math.max(filters.limit || SEARCH_MAX_LIMIT, 1), SEARCH_MAX_LIMIT);
     }
     if (filters.limit !== undefined && Number.isFinite(filters.limit)) {
       return Math.max(filters.limit, 1);
     }
-    return undefined;
+    if (!hasBbox) return undefined;
+    if (viewportMode === 'clusters') return VIEWPORT_CLUSTER_LIMIT;
+    return includeGeometry ? VIEWPORT_GEOMETRY_LIMIT : VIEWPORT_MARKER_LIMIT;
   }
 
   private async listClusters(
-    source: Exclude<ParcelSource, 'osm_hcm'>,
+    source: ParcelSource,
     table: string,
     where: string[],
     params: unknown[],
@@ -181,7 +185,7 @@ export class ParcelsService {
     isSearch: boolean,
   ) {
     const cellSize = gridCellDegrees(filters.zoom!);
-    const limit = this.resolveListLimit(filters, isSearch);
+    const limit = this.resolveListLimit(filters, isSearch, true, false, 'clusters');
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     params.push(cellSize);
@@ -231,15 +235,6 @@ export class ParcelsService {
 
   async suggestAddress(sourceInput: string | undefined, q: string, limit?: number) {
     const source = parseParcelSource(sourceInput);
-    if (isOsmSource(source)) {
-      const items = await this.osmParcels.suggest(q, limit);
-      return {
-        source,
-        items,
-        engine: 'postgres' as const,
-      };
-    }
-
     const items = await this.parcelSearch.suggest({ source, q, limit });
     return {
       source,
@@ -321,18 +316,6 @@ export class ParcelsService {
 
   async stats(sourceInput?: string) {
     const source = parseParcelSource(sourceInput);
-    if (isOsmSource(source)) {
-      const now = Date.now();
-      const cached = this.statsCache.get(source);
-      if (cached && cached.expiresAt > now) {
-        return cached.data;
-      }
-
-      const data = await this.osmParcels.stats();
-      this.statsCache.set(source, { data, expiresAt: now + STATS_TTL_MS });
-      return data;
-    }
-
     const now = Date.now();
     const cached = this.statsCache.get(source);
     if (cached && cached.expiresAt > now) {

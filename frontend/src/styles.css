@@ -314,6 +314,7 @@ body,
   border: none !important;
   width: auto !important;
   height: auto !important;
+  pointer-events: none !important;
 }
 
 .qhsdd-zone-label {

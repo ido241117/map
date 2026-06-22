@@ -2,6 +2,11 @@
 export const CLUSTER_MAX_ZOOM = 15;
 export const GEOMETRY_MIN_ZOOM = 16;
 
+/** Demo viewport caps — avoid unbounded bbox loads on multi-million tables. */
+export const VIEWPORT_GEOMETRY_LIMIT = 1200;
+export const VIEWPORT_MARKER_LIMIT = 4000;
+export const VIEWPORT_CLUSTER_LIMIT = 800;
+
 export type MapViewportMode = 'clusters' | 'parcels';
 
 export function mapViewportMode(zoom: number | undefined, isSearch: boolean): MapViewportMode {

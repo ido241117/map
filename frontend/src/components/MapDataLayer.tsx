@@ -8,11 +8,22 @@ import {
   shouldShowQhsddLabels,
   shouldShowQhsddOverlay,
 } from '../mapViewport';
+import {
+  boundsContains,
+  boundsToQuery,
+  expandBounds,
+  filterParcelsInBounds,
+  getViewportZoomBucket,
+  MAP_MOVE_DEBOUNCE_MS,
+  mergeParcelsIntoStore,
+  pruneParcelStore,
+  resolveParcelLimit,
+  VIEWPORT_FETCH_PAD,
+} from '../mapViewportCache';
 import type { MapCluster, Parcel, ParcelListResponse, QhsddZone } from '../types';
 
-const DEBOUNCE_MS = 300;
 const MARKER_CHUNK = 600;
-const GEOMETRY_CHUNK = 200;
+const GEOMETRY_CHUNK = 400;
 const CLUSTER_CHUNK = 120;
 const QHSDD_CHUNK = 250;
 
@@ -27,34 +38,10 @@ const POLYGON_STYLE: L.PathOptions = {
   weight: 1,
 };
 
-const OSM_POLYGON_STYLE: L.PathOptions = {
-  color: '#1e3a8a',
-  fillColor: '#3b82f6',
-  fillOpacity: 0.35,
-  opacity: 0.9,
-  weight: 1,
-};
-
-const OSM_LINE_STYLE: L.PathOptions = {
-  color: '#dc2626',
-  fillOpacity: 0,
-  opacity: 0.85,
-  weight: 2,
-};
-
 const MARKER_STYLE: L.CircleMarkerOptions = {
   radius: 4,
   fillColor: '#22c55e',
   color: '#14532d',
-  weight: 1,
-  opacity: 0.85,
-  fillOpacity: 0.65,
-};
-
-const OSM_MARKER_STYLE: L.CircleMarkerOptions = {
-  radius: 4,
-  fillColor: '#3b82f6',
-  color: '#1e3a8a',
   weight: 1,
   opacity: 0.85,
   fillOpacity: 0.65,
@@ -110,8 +97,25 @@ function qhsddLabelHtml(zone: QhsddZone) {
   return `<div class="qhsdd-zone-label"><span class="qhsdd-zone-name">${name}</span></div>`;
 }
 
-function bindParcelInteraction(layer: L.Layer, parcel: Parcel, isOsm: boolean) {
-  layer.bindPopup(popupHtml(parcel, isOsm), POPUP_OPTIONS);
+function buildFilterKey(filters: Omit<ParcelQuery, 'minLat' | 'maxLat' | 'minLng' | 'maxLng' | 'includeGeometry'>) {
+  return JSON.stringify({
+    source: filters.source,
+    q: filters.q,
+    district: filters.district,
+    ward: filters.ward,
+    landType: filters.landType,
+    minArea: filters.minArea,
+    maxArea: filters.maxArea,
+  });
+}
+
+function bindParcelInteraction(map: L.Map, layer: L.Layer, parcel: Parcel) {
+  layer.on('click', (event: L.LeafletMouseEvent) => {
+    L.popup(POPUP_OPTIONS)
+      .setLatLng(event.latlng)
+      .setContent(popupHtml(parcel))
+      .openOn(map);
+  });
 }
 
 const POPUP_OPTIONS: L.PopupOptions = {
@@ -119,18 +123,7 @@ const POPUP_OPTIONS: L.PopupOptions = {
   autoPan: false,
 };
 
-function popupHtml(parcel: Parcel, isOsm = false) {
-  if (isOsm) {
-    return `
-      <div class="popup">
-        <strong>${parcel.address || parcel.property_code || 'OSM feature'}</strong>
-        <span>Loại: ${parcel.planning_land_type || '—'}</span>
-        <span>OSM ID: ${parcel.property_code || '—'}</span>
-        ${parcel.total_area ? `<span>Diện tích ~${formatNumber(parcel.total_area)} m²</span>` : ''}
-      </div>
-    `;
-  }
-
+function popupHtml(parcel: Parcel) {
   return `
     <div class="popup">
       <strong>${parcel.address || parcel.property_code || 'Thửa đất'}</strong>
@@ -180,7 +173,22 @@ export function MapDataLayer({
   const qhsddPolygonGenRef = useRef(0);
   const qhsddLabelGenRef = useRef(0);
   const lastFetchKeyRef = useRef('');
-  const lastRenderedKeyRef = useRef('');
+  const loadedParcelsRef = useRef<Map<number, Parcel>>(new Map());
+  const parcelCacheRef = useRef<{
+    fetchBounds: L.LatLngBounds;
+    zoom: number;
+    filterKey: string;
+    showGeometry: boolean;
+    fetchKey: string;
+    result: ParcelListResponse;
+  } | null>(null);
+  const qhsddCacheRef = useRef<{
+    fetchBounds: L.LatLngBounds;
+    zoom: number;
+    fetchKey: string;
+    zones: QhsddZone[];
+  } | null>(null);
+  const skipViewportCacheRef = useRef(false);
   const suppressEventsRef = useRef(false);
   const pendingAfterPopupRef = useRef(false);
 
@@ -192,9 +200,7 @@ export function MapDataLayer({
   onErrorRef.current = onError;
 
   const renderQhsddLabels = useCallback((zones: QhsddZone[]) => {
-    if (!qhsddLabelsLayerRef.current) {
-      qhsddLabelsLayerRef.current = L.layerGroup().addTo(map);
-    }
+    if (!qhsddLabelsLayerRef.current) return;
 
     const group = qhsddLabelsLayerRef.current;
     const gen = ++qhsddLabelGenRef.current;
@@ -246,9 +252,7 @@ export function MapDataLayer({
   }, [renderQhsddLabels]);
 
   const renderQhsddZones = useCallback((zones: QhsddZone[], zoom: number) => {
-    if (!qhsddLayerRef.current) {
-      qhsddLayerRef.current = L.layerGroup().addTo(map);
-    }
+    if (!qhsddLayerRef.current) return;
 
     const group = qhsddLayerRef.current;
     const gen = ++qhsddPolygonGenRef.current;
@@ -304,14 +308,22 @@ export function MapDataLayer({
       layerRef.current = L.layerGroup().addTo(map);
     }
 
-    const isOsm = filtersRef.current.source === 'osm_hcm';
     const group = layerRef.current;
     const gen = ++renderGenRef.current;
-    group.clearLayers();
+    const staging = L.layerGroup();
+
+    const commitStaging = () => {
+      if (gen !== renderGenRef.current) return;
+      group.clearLayers();
+      staging.eachLayer((layer) => layer.addTo(group));
+    };
 
     if (showGeometry) {
       const withGeometry = parcels.filter((p) => p.geometry_json);
-      if (!withGeometry.length) return;
+      if (!withGeometry.length) {
+        group.clearLayers();
+        return;
+      }
 
       let index = 0;
       const renderer = polygonRendererRef.current;
@@ -334,20 +346,16 @@ export function MapDataLayer({
 
         L.geoJSON(collection, {
           pane: PARCEL_PANE,
-          style: (feature) => {
-            const type = feature?.geometry?.type;
-            if (type === 'LineString' || type === 'MultiLineString') {
-              return { ...OSM_LINE_STYLE, renderer };
-            }
-            return { ...(isOsm ? OSM_POLYGON_STYLE : POLYGON_STYLE), renderer };
-          },
+          style: () => ({ ...POLYGON_STYLE, renderer }),
           onEachFeature: (feature, layer) => {
-            bindParcelInteraction(layer, feature.properties as Parcel, isOsm);
+            bindParcelInteraction(map, layer, feature.properties as Parcel);
           },
-        }).addTo(group);
+        }).addTo(staging);
 
         if (index < withGeometry.length) {
           requestAnimationFrame(step);
+        } else {
+          commitStaging();
         }
       };
 
@@ -365,16 +373,18 @@ export function MapDataLayer({
       for (; index < end; index += 1) {
         const parcel = parcels[index];
         const marker = L.circleMarker([parcel.latitude, parcel.longitude], {
-          ...(isOsm ? OSM_MARKER_STYLE : MARKER_STYLE),
+          ...MARKER_STYLE,
           pane: PARCEL_PANE,
           renderer,
         });
-        bindParcelInteraction(marker, parcel, isOsm);
-        marker.addTo(group);
+        bindParcelInteraction(map, marker, parcel);
+        marker.addTo(staging);
       }
 
       if (index < parcels.length) {
         requestAnimationFrame(step);
+      } else {
+        commitStaging();
       }
     };
 
@@ -388,8 +398,17 @@ export function MapDataLayer({
 
     const group = layerRef.current;
     const gen = ++renderGenRef.current;
-    group.clearLayers();
-    if (!clusters.length) return;
+    const staging = L.layerGroup();
+    if (!clusters.length) {
+      group.clearLayers();
+      return;
+    }
+
+    const commitStaging = () => {
+      if (gen !== renderGenRef.current) return;
+      group.clearLayers();
+      staging.eachLayer((layer) => layer.addTo(group));
+    };
 
     const renderer = pointRendererRef.current;
     let index = 0;
@@ -412,10 +431,11 @@ export function MapDataLayer({
           renderer,
         })
           .bindPopup(clusterPopupHtml(cluster), POPUP_OPTIONS)
-          .addTo(group);
+          .addTo(staging);
 
         if (cluster.cluster_count >= 20) {
           L.marker([cluster.latitude, cluster.longitude], {
+            pane: PARCEL_PANE,
             icon: L.divIcon({
               className: 'parcel-cluster-label',
               html: `<span>${formatNumber(cluster.cluster_count)}</span>`,
@@ -423,17 +443,28 @@ export function MapDataLayer({
               iconAnchor: [20, 10],
             }),
             interactive: false,
-          }).addTo(group);
+          }).addTo(staging);
         }
       }
 
       if (index < clusters.length) {
         requestAnimationFrame(step);
+      } else {
+        commitStaging();
       }
     };
 
     requestAnimationFrame(step);
   }, [map]);
+
+  const renderVisibleParcels = useCallback((viewBounds: L.LatLngBounds, showGeometry: boolean) => {
+    const visible = filterParcelsInBounds(
+      loadedParcelsRef.current.values(),
+      expandBounds(viewBounds, 0.15),
+    );
+    renderParcels(visible, showGeometry);
+    return visible;
+  }, [renderParcels]);
 
   useEffect(() => {
     if (!map.getPane(QHSDD_PANE)) {
@@ -449,6 +480,14 @@ export function MapDataLayer({
       const pane = map.createPane(PROPERTY_BUY_PANE);
       pane.style.zIndex = '660';
       pane.style.pointerEvents = 'none';
+    }
+
+    // QHSDD layer groups sit below parcel layers so thửa đất stays clickable.
+    if (!qhsddLayerRef.current) {
+      qhsddLayerRef.current = L.layerGroup().addTo(map);
+    }
+    if (!qhsddLabelsLayerRef.current) {
+      qhsddLabelsLayerRef.current = L.layerGroup().addTo(map);
     }
   }, [map, PROPERTY_BUY_PANE]);
 
@@ -471,6 +510,9 @@ export function MapDataLayer({
     const showGeometry = shouldIncludeGeometry(zoom, isAddressSearch);
     const showQhsdd = shouldShowQhsddOverlay(current.source, zoom, isAddressSearch);
     const showParcels = shouldShowParcelMapOverlay(current.source, zoom, isAddressSearch);
+    const filterKey = buildFilterKey(current);
+    const zoomBucket = getViewportZoomBucket(zoom, isAddressSearch);
+    const viewBounds = bounds;
     if (current.source === 'property_buy_records') {
       renderGenRef.current += 1;
       if (layerRef.current) {
@@ -506,76 +548,6 @@ export function MapDataLayer({
       );
       return;
     }
-    if (current.source === 'hcm_qhsdd') {
-      renderGenRef.current += 1;
-      layerRef.current?.clearLayers();
-
-      const qhsddKey = JSON.stringify({
-        source: 'hcm_qhsdd',
-        minLat: bounds.getSouth().toFixed(4),
-        maxLat: bounds.getNorth().toFixed(4),
-        minLng: bounds.getWest().toFixed(4),
-        maxLng: bounds.getEast().toFixed(4),
-        zoom,
-      });
-      if (qhsddKey === lastFetchKeyRef.current) return;
-
-      const requestId = ++requestIdRef.current;
-      onErrorRef.current('');
-
-      try {
-        if (!showQhsdd) {
-          qhsddLayerRef.current?.clearLayers();
-          lastQhsddZonesRef.current = [];
-          qhsddLabelsLayerRef.current?.clearLayers();
-          qhsddLabelsVisibleRef.current = false;
-          lastFetchKeyRef.current = qhsddKey;
-          onUpdateRef.current(
-            {
-              source: 'hcm_qhsdd',
-              mode: 'parcels',
-              items: [],
-              clusters: [],
-              truncated: false,
-              returned: 0,
-            },
-            zoom,
-          );
-          return;
-        }
-
-        const qhsddResult = await fetchQhsddZones(
-          {
-            minLat: bounds.getSouth().toFixed(4),
-            maxLat: bounds.getNorth().toFixed(4),
-            minLng: bounds.getWest().toFixed(4),
-            maxLng: bounds.getEast().toFixed(4),
-            zoom: String(zoom),
-          },
-          controller.signal,
-        );
-        if (controller.signal.aborted || requestId !== requestIdRef.current) return;
-
-        lastFetchKeyRef.current = qhsddKey;
-        onUpdateRef.current(
-          {
-            source: 'hcm_qhsdd',
-            mode: 'parcels',
-            items: [],
-            clusters: [],
-            truncated: qhsddResult.truncated,
-            returned: qhsddResult.returned,
-          },
-          zoom,
-        );
-        renderQhsddZones(qhsddResult.items, zoom);
-      } catch (err) {
-        if (controller.signal.aborted || requestId !== requestIdRef.current) return;
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        onErrorRef.current(err instanceof Error ? err.message : 'Lỗi tải dữ liệu');
-      }
-      return;
-    }
     if (propertyBuyLayerRef.current) {
       propertyBuyLayerRef.current.clearLayers();
     }
@@ -588,70 +560,139 @@ export function MapDataLayer({
         qhsddLabelsLayerRef.current.clearLayers();
       }
       qhsddLabelsVisibleRef.current = false;
+      qhsddCacheRef.current = null;
     }
+
+    const parcelCache = parcelCacheRef.current;
+    const useViewportCache = !skipViewportCacheRef.current && !isAddressSearch;
+    skipViewportCacheRef.current = false;
+
+    const parcelCacheHit =
+      useViewportCache &&
+      showParcels &&
+      parcelCache !== null &&
+      parcelCache.zoom === zoom &&
+      parcelCache.filterKey === filterKey &&
+      parcelCache.showGeometry === showGeometry &&
+      boundsContains(parcelCache.fetchBounds, viewBounds);
+
+    const qhsddCache = qhsddCacheRef.current;
+    const qhsddCacheHit =
+      useViewportCache &&
+      showQhsdd &&
+      qhsddCache !== null &&
+      qhsddCache.zoom === zoom &&
+      boundsContains(qhsddCache.fetchBounds, viewBounds);
+
+    if (parcelCacheHit && parcelCache) {
+      const visible = renderVisibleParcels(viewBounds, showGeometry);
+      onUpdateRef.current({ ...parcelCache.result, returned: visible.length }, zoom);
+    }
+
+    if (qhsddCacheHit && qhsddCache) {
+      lastQhsddZonesRef.current = qhsddCache.zones;
+      if (shouldShowQhsddLabels(zoom) && !qhsddLabelsVisibleRef.current) {
+        renderQhsddLabels(qhsddCache.zones);
+      }
+    }
+
+    if (parcelCacheHit && (!showQhsdd || qhsddCacheHit)) {
+      return;
+    }
+
+    const fetchBounds = expandBounds(viewBounds, VIEWPORT_FETCH_PAD);
+    const bboxQuery = boundsToQuery(fetchBounds, zoom);
+    const parcelMode = zoomBucket === 'clusters' ? 'clusters' : 'parcels';
+    const parcelLimit = resolveParcelLimit(showGeometry, parcelMode);
 
     const query: ParcelQuery = {
       ...current,
-      ...(isAddressSearch
-        ? {}
-        : {
-            minLat: bounds.getSouth().toFixed(4),
-            maxLat: bounds.getNorth().toFixed(4),
-            minLng: bounds.getWest().toFixed(4),
-            maxLng: bounds.getEast().toFixed(4),
-          }),
+      ...(isAddressSearch ? {} : bboxQuery),
       zoom: isAddressSearch ? undefined : String(zoom),
       includeGeometry: showGeometry ? 'true' : 'false',
+      limit: isAddressSearch ? undefined : String(parcelLimit),
     };
 
-    const fetchKey = JSON.stringify(query);
-    if (fetchKey === lastFetchKeyRef.current) return;
+    const parcelFetchKey = JSON.stringify({
+      kind: 'parcels',
+      query,
+      zoomBucket,
+    });
+    const qhsddFetchKey = JSON.stringify({
+      kind: 'qhsdd',
+      ...bboxQuery,
+      zoom,
+    });
+    const combinedFetchKey = `${parcelFetchKey}|${showQhsdd ? qhsddFetchKey : 'off'}`;
 
     const requestId = ++requestIdRef.current;
     onErrorRef.current('');
 
     try {
-      const [result, qhsddResult] = await Promise.all([
-        fetchParcels(query, controller.signal),
-        showQhsdd
-          ? fetchQhsddZones(
+      const parcelPromise =
+        parcelCacheHit || !showParcels
+          ? Promise.resolve(parcelCache?.result ?? null)
+          : fetchParcels(query, controller.signal);
+
+      const qhsddPromise =
+        !showQhsdd || qhsddCacheHit
+          ? Promise.resolve(null)
+          : fetchQhsddZones(
               {
-                minLat: bounds.getSouth().toFixed(4),
-                maxLat: bounds.getNorth().toFixed(4),
-                minLng: bounds.getWest().toFixed(4),
-                maxLng: bounds.getEast().toFixed(4),
+                ...bboxQuery,
                 zoom: String(zoom),
               },
               controller.signal,
-            )
-          : Promise.resolve({ items: [], returned: 0, truncated: false }),
-      ]);
+            );
+
+      const [result, qhsddResult] = await Promise.all([parcelPromise, qhsddPromise]);
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
 
-      lastFetchKeyRef.current = fetchKey;
-      onUpdateRef.current(result, zoom);
+      lastFetchKeyRef.current = combinedFetchKey;
 
-      if (showQhsdd) {
-        renderQhsddZones(qhsddResult.items, zoom);
+      if (result && !parcelCacheHit) {
+        if (!isAddressSearch && result.mode === 'parcels') {
+          mergeParcelsIntoStore(loadedParcelsRef.current, result.items);
+          pruneParcelStore(loadedParcelsRef.current, viewBounds);
+          parcelCacheRef.current = {
+            fetchBounds,
+            zoom,
+            filterKey,
+            showGeometry,
+            fetchKey: parcelFetchKey,
+            result,
+          };
+          const visible = renderVisibleParcels(viewBounds, showGeometry);
+          onUpdateRef.current({ ...result, returned: visible.length }, zoom);
+        } else {
+          loadedParcelsRef.current.clear();
+          if (isAddressSearch) {
+            mergeParcelsIntoStore(loadedParcelsRef.current, result.items);
+          }
+          onUpdateRef.current(result, zoom);
+          if (result.mode === 'clusters') {
+            renderClusters(result.clusters);
+          } else {
+            renderParcels(result.items, showGeometry);
+          }
+        }
       }
 
-      if (fetchKey !== lastRenderedKeyRef.current) {
-        lastRenderedKeyRef.current = fetchKey;
-        if (!showParcels) {
-          renderGenRef.current += 1;
-          layerRef.current?.clearLayers();
-        } else if (result.mode === 'clusters') {
-          renderClusters(result.clusters);
-        } else {
-          renderParcels(result.items, showGeometry);
-        }
+      if (qhsddResult && showQhsdd) {
+        qhsddCacheRef.current = {
+          fetchBounds,
+          zoom,
+          fetchKey: qhsddFetchKey,
+          zones: qhsddResult.items,
+        };
+        renderQhsddZones(qhsddResult.items, zoom);
       }
     } catch (err) {
       if (controller.signal.aborted || requestId !== requestIdRef.current) return;
       if (err instanceof DOMException && err.name === 'AbortError') return;
       onErrorRef.current(err instanceof Error ? err.message : 'Lỗi tải dữ liệu');
     }
-  }, [map, renderParcels, renderClusters, renderQhsddZones, PROPERTY_BUY_PANE]);
+  }, [map, renderParcels, renderClusters, renderVisibleParcels, renderQhsddZones, renderQhsddLabels, PROPERTY_BUY_PANE]);
 
   const runFetchRef = useRef(runFetch);
   runFetchRef.current = runFetch;
@@ -673,7 +714,7 @@ export function MapDataLayer({
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       void runFetchRef.current();
-    }, DEBOUNCE_MS);
+    }, MAP_MOVE_DEBOUNCE_MS);
   }, [map]);
 
   const scheduleFetchRef = useRef(scheduleFetch);
@@ -686,7 +727,13 @@ export function MapDataLayer({
     },
     zoomend: () => {
       if (filtersRef.current.source === 'property_buy_records') return;
+      skipViewportCacheRef.current = true;
+      parcelCacheRef.current = null;
+      qhsddCacheRef.current = null;
+      loadedParcelsRef.current.clear();
+      lastFetchKeyRef.current = '';
       syncQhsddLabels(map.getZoom());
+      scheduleFetchRef.current();
     },
   });
 
@@ -696,6 +743,9 @@ export function MapDataLayer({
     qhsddPolygonGenRef.current += 1;
     qhsddLabelGenRef.current += 1;
     abortRef.current?.abort();
+    parcelCacheRef.current = null;
+    qhsddCacheRef.current = null;
+    loadedParcelsRef.current.clear();
     if (layerRef.current) {
       layerRef.current.clearLayers();
     }
@@ -714,11 +764,13 @@ export function MapDataLayer({
 
   useEffect(() => {
     lastFetchKeyRef.current = '';
-    lastRenderedKeyRef.current = '';
+    parcelCacheRef.current = null;
+    qhsddCacheRef.current = null;
+    loadedParcelsRef.current.clear();
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       void runFetchRef.current();
-    }, DEBOUNCE_MS);
+    }, MAP_MOVE_DEBOUNCE_MS);
   }, [filtersVersion]);
 
   useEffect(() => {

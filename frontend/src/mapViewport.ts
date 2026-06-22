@@ -6,7 +6,7 @@ export const QHSDD_LABEL_MIN_ZOOM = 17;
 
 export function shouldShowQhsddOverlay(source: string | undefined, zoom: number, isSearch: boolean) {
   if (isSearch) return false;
-  if (source !== 'hcm_qhsdd') return false;
+  if (source !== 'land_parcels') return false;
   return zoom >= QHSDD_MIN_ZOOM;
 }
 
@@ -15,9 +15,8 @@ export function shouldShowQhsddLabels(zoom: number) {
 }
 
 export function shouldShowParcelMapOverlay(source: string | undefined, _zoom: number, isSearch: boolean) {
-  if (source === 'hcm_qhsdd' || source === 'property_buy_records') return false;
-  if (isSearch) return source === 'land_parcels' || source === 'guland_hcm_land' || source === 'osm_hcm';
-  return source === 'land_parcels' || source === 'guland_hcm_land' || source === 'osm_hcm';
+  if (source === 'property_buy_records') return false;
+  return source === 'land_parcels';
 }
 
 export function shouldIncludeGeometry(zoom: number, isSearch: boolean): boolean {

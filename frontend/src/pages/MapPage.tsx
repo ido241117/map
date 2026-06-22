@@ -4,7 +4,7 @@ import { MapContainer, TileLayer } from 'react-leaflet';
 import { fetchParcelAddressSuggest, fetchStats, type ParcelQuery } from '../api';
 import { MapDataLayer } from '../components/MapDataLayer';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, isQhsddMapSource, type ParcelAddressSuggestion, type ParcelListResponse, type ParcelSource, type Stats } from '../types';
+import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelListResponse, type ParcelSource, type Stats } from '../types';
 
 const HCM_CENTER: [number, number] = [10.7769, 106.7009];
 
@@ -24,7 +24,7 @@ export function MapPage() {
   const [suggestions, setSuggestions] = useState<ParcelAddressSuggestion[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [mapResult, setMapResult] = useState<ParcelListResponse | null>(null);
-  const [mapZoom, setMapZoom] = useState(12);
+  const [mapZoom, setMapZoom] = useState(17);
   const [error, setError] = useState('');
   const [mapFocus, setMapFocus] = useState<{
     lat: number;
@@ -44,7 +44,7 @@ export function MapPage() {
   );
 
   useEffect(() => {
-    if (dataSource === 'property_buy_records' || isQhsddMapSource(dataSource)) {
+    if (dataSource === 'property_buy_records') {
       setStats(null);
       return;
     }
@@ -55,7 +55,7 @@ export function MapPage() {
 
   useEffect(() => {
     const query = debouncedSuggest.trim();
-    if (dataSource === 'property_buy_records' || isQhsddMapSource(dataSource)) {
+    if (dataSource === 'property_buy_records') {
       setSuggestions([]);
       return;
     }
@@ -113,10 +113,9 @@ export function MapPage() {
     setError('');
   };
 
-  const isOsmSource = dataSource === 'osm_hcm';
   const isPropertyBuySource = dataSource === 'property_buy_records';
-  const isQhsddSource = isQhsddMapSource(dataSource);
   const showsDistrictFilters = isParcelDataSource(dataSource);
+  const showsQhsddOverlay = dataSource === 'land_parcels';
 
   const statusText = mapResult
     ? debouncedSearch
@@ -128,8 +127,8 @@ export function MapPage() {
           ? `${mapResult.returned}+ ô gom · ~${formatNumber(mapResult.cluster_parcels || 0)}+ thửa (zoom ${mapZoom})`
           : `${mapResult.returned} ô gom · ~${formatNumber(mapResult.cluster_parcels || 0)} thửa (zoom ${mapZoom})`
         : mapResult.truncated
-          ? `${mapResult.returned}+ ${isPropertyBuySource ? 'tọa độ giao dịch' : isQhsddSource ? 'vùng QHSDD' : isOsmSource ? 'đối tượng' : 'thửa'} trong vùng nhìn (zoom ${mapZoom})`
-          : `${mapResult.returned} ${isPropertyBuySource ? 'tọa độ giao dịch' : isQhsddSource ? 'vùng QHSDD' : isOsmSource ? 'đối tượng' : 'thửa'} trong vùng nhìn (zoom ${mapZoom})`
+          ? `${mapResult.returned}+ ${isPropertyBuySource ? 'tọa độ giao dịch' : 'thửa'} (giới hạn vùng nhìn · zoom ${mapZoom})`
+          : `${mapResult.returned} ${isPropertyBuySource ? 'tọa độ giao dịch' : 'thửa'} trong vùng nhìn (zoom ${mapZoom})`
     : debouncedSearch
       ? 'Đang tìm kiếm...'
       : 'Di chuyển bản đồ để tải dữ liệu';
@@ -174,17 +173,10 @@ export function MapPage() {
           >
             <Input
               allowClear
-              placeholder={
-                isQhsddSource
-                  ? 'Chế độ QHSDD — không hỗ trợ tìm kiếm'
-                  : isOsmSource
-                    ? 'Tìm tên địa điểm OSM...'
-                    : 'Tìm địa chỉ, phường, quận, mã thửa...'
-              }
-              disabled={isQhsddSource}
+              placeholder="Tìm địa chỉ, phường, quận, mã thửa..."
             />
           </AutoComplete>
-          {!isOsmSource && !isPropertyBuySource && showsDistrictFilters ? (
+          {!isPropertyBuySource && showsDistrictFilters ? (
             <>
               <Select
                 className="map-filter-district"
@@ -211,21 +203,6 @@ export function MapPage() {
                 ]}
               />
             </>
-          ) : isOsmSource ? (
-            <>
-              <Select
-                className="map-filter-ward"
-                value={filters.landType ?? ''}
-                onChange={(value) => updateFilters({ landType: value || undefined })}
-                options={[
-                  { value: '', label: 'Tất cả loại OSM' },
-                  ...(stats?.landTypes.map((item) => ({
-                    value: item.planning_land_type,
-                    label: `${item.planning_land_type} (${item.count})`,
-                  })) ?? []),
-                ]}
-              />
-            </>
           ) : null}
           <Typography.Text type="secondary" className="map-status-text" ellipsis>
             {statusText}
@@ -242,7 +219,7 @@ export function MapPage() {
         ) : null}
         <MapContainer
           center={HCM_CENTER}
-          zoom={12}
+          zoom={17}
           className="map"
           preferCanvas
           zoomAnimation={false}
@@ -282,14 +259,13 @@ export function MapPage() {
         </span>
         {isPropertyBuySource ? (
           <span>Tổng giao dịch map: <strong>{formatNumber(mapResult?.returned || 0)}</strong></span>
-        ) : isQhsddSource ? (
-          <span>Lớp QHSDD: <strong>47.882</strong> vùng · nhãn zoom ≥17</span>
-        ) : isOsmSource ? (
-          <span>Tổng OSM: <strong>{formatNumber(stats?.summary.parcel_count || 0)}</strong> (polygon + line + point)</span>
         ) : (
           <>
             <span>TB diện tích: <strong>{formatNumber(stats?.summary.avg_area)} m²</strong></span>
             <span>Tổng thửa: <strong>{formatNumber(stats?.summary.parcel_count || 0)}</strong></span>
+            {showsQhsddOverlay ? (
+              <span>Lớp QHSDD nền: <strong>47.882</strong> vùng · nhãn zoom ≥17</span>
+            ) : null}
           </>
         )}
       </div>

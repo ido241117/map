@@ -17,27 +17,15 @@ export type QhsddZoneListResponse = {
   truncated: boolean;
 };
 
-export type ParcelSource =
-  | 'land_parcels'
-  | 'hcm_qhsdd'
-  | 'guland_hcm_land'
-  | 'osm_hcm'
-  | 'property_buy_records';
+export type ParcelSource = 'land_parcels' | 'property_buy_records';
 
 export const PARCEL_SOURCE_OPTIONS: Array<{ value: ParcelSource; label: string }> = [
-  { value: 'land_parcels', label: 'Thửa đất (gốc)' },
-  { value: 'hcm_qhsdd', label: 'QHSDD / Quy hoạch' },
-  { value: 'guland_hcm_land', label: 'Guland HCM' },
-  { value: 'osm_hcm', label: 'OpenStreetMap (HCM)' },
-  { value: 'property_buy_records', label: 'Tọa độ giao dịch' },
+  { value: 'land_parcels', label: 'Thửa đất + QHSDD' },
+  { value: 'property_buy_records', label: 'Địa chỉ giao dịch' },
 ];
 
 export function isParcelDataSource(source: ParcelSource | undefined) {
-  return source === 'land_parcels' || source === 'guland_hcm_land';
-}
-
-export function isQhsddMapSource(source: ParcelSource | undefined) {
-  return source === 'hcm_qhsdd';
+  return source === 'land_parcels';
 }
 
 export type User = {
@@ -84,7 +72,7 @@ export type ParcelAddressSuggestion = {
 export type ParcelAddressSuggestResponse = {
   source: ParcelSource;
   items: ParcelAddressSuggestion[];
-  engine: 'elasticsearch' | 'postgres' | 'unavailable';
+  engine: 'elasticsearch' | 'unavailable';
 };
 
 export type MapCluster = {
