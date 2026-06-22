@@ -11,6 +11,9 @@ export type PropertyBuyRecord = {
   district: string;
   city: string;
   price_buy: number;
+  string: string | null;
+  lat: number | null;
+  long: number | null;
   imported_at: string;
 };
 
@@ -27,6 +30,15 @@ type ListFilters = {
   ward?: string;
   page?: number;
   pageSize?: number;
+};
+
+type MapPoint = {
+  id: number;
+  record_id: number;
+  address: string;
+  string: string | null;
+  lat: number;
+  long: number;
 };
 
 @Injectable()
@@ -67,7 +79,7 @@ export class PropertyBuysService {
 
     const listParams = [...params, pageSize, offset];
     const result = await this.db.query<PropertyBuyRecord>(
-      `SELECT id, record_id, customer_name, address, street, ward, district, city, price_buy, imported_at
+      `SELECT id, record_id, customer_name, address, street, ward, district, city, price_buy, string, lat, long, imported_at
        FROM property_buy_records
        ${where}
        ORDER BY id DESC
@@ -111,6 +123,23 @@ export class PropertyBuysService {
         ward: r.ward,
         count: Number(r.count),
       })),
+    };
+  }
+
+  async mapPoints(limit = 100) {
+    const safeLimit = Math.max(1, Math.min(5000, limit));
+    const result = await this.db.query<MapPoint>(
+      `SELECT id, record_id, address, string, lat, long
+       FROM property_buy_records
+       WHERE lat IS NOT NULL AND long IS NOT NULL
+       ORDER BY id DESC
+       LIMIT $1`,
+      [safeLimit],
+    );
+
+    return {
+      items: result.rows,
+      total: result.rows.length,
     };
   }
 }

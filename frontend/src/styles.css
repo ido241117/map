@@ -144,6 +144,48 @@ body,
   flex-shrink: 0;
 }
 
+.map-filters-card .ant-card-body {
+  padding: 10px 12px;
+}
+
+.map-filters-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.map-filter-source {
+  width: 168px;
+  flex-shrink: 0;
+}
+
+.map-filter-search {
+  flex: 1 1 240px;
+  min-width: 160px;
+  width: 100%;
+}
+
+.map-filter-district,
+.map-filter-ward {
+  width: 152px;
+  flex-shrink: 0;
+}
+
+.map-filter-property-buy-overlay {
+  width: 210px;
+  flex-shrink: 0;
+}
+
+.map-status-text {
+  flex: 1 1 220px;
+  min-width: 180px;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
 .address-suggest-option {
   display: flex;
   flex-direction: column;
@@ -265,6 +307,50 @@ body,
 .popup span {
   color: #475569;
   font-size: 12px;
+}
+
+.qhsdd-zone-label-wrap {
+  background: transparent !important;
+  border: none !important;
+  width: auto !important;
+  height: auto !important;
+}
+
+.qhsdd-zone-label {
+  width: max-content;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.qhsdd-zone-name {
+  display: block;
+  white-space: nowrap;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-shadow:
+    0 0 4px #fff,
+    0 0 4px #fff,
+    1px 1px 0 #fff,
+    -1px -1px 0 #fff;
+}
+
+.parcel-cluster-label {
+  background: transparent;
+  border: none;
+}
+
+.parcel-cluster-label span {
+  display: block;
+  color: #14532d;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+  pointer-events: none;
 }
 
 @media (max-width: 768px) {

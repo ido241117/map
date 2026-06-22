@@ -1,10 +1,15 @@
-export const PARCEL_SOURCES = ['land_parcels', 'guland_hcm_land'] as const;
+export const PARCEL_SOURCES = ['land_parcels', 'guland_hcm_land', 'osm_hcm'] as const;
 
 export type ParcelSource = (typeof PARCEL_SOURCES)[number];
 
 export function parseParcelSource(value?: string): ParcelSource {
   if (value === 'guland_hcm_land') return 'guland_hcm_land';
+  if (value === 'osm_hcm') return 'osm_hcm';
   return 'land_parcels';
+}
+
+export function isOsmSource(source: ParcelSource) {
+  return source === 'osm_hcm';
 }
 
 type SourceSql = {
@@ -19,7 +24,7 @@ type SourceSql = {
   statsLandTypeSql: string;
 };
 
-export const SOURCE_SQL: Record<ParcelSource, SourceSql> = {
+export const SOURCE_SQL: Record<Exclude<ParcelSource, 'osm_hcm'>, SourceSql> = {
   land_parcels: {
     table: 'land_parcels',
     selectColumns: `

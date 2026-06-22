@@ -1,10 +1,14 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { Public } from '../auth/public.decorator';
 import { ParcelsService } from './parcels.service';
+import { QhsddService } from './qhsdd.service';
 
 @Controller()
 export class ParcelsController {
-  constructor(private readonly parcelsService: ParcelsService) {}
+  constructor(
+    private readonly parcelsService: ParcelsService,
+    private readonly qhsddService: QhsddService,
+  ) {}
 
   @Public()
   @Get('health')
@@ -26,6 +30,7 @@ export class ParcelsController {
     @Query('minLng') minLng?: string,
     @Query('maxLng') maxLng?: string,
     @Query('includeGeometry') includeGeometry?: string,
+    @Query('zoom') zoom?: string,
     @Query('limit') limit?: string,
   ) {
     return this.parcelsService.list({
@@ -40,7 +45,8 @@ export class ParcelsController {
       maxLat: maxLat ? Number(maxLat) : undefined,
       minLng: minLng ? Number(minLng) : undefined,
       maxLng: maxLng ? Number(maxLng) : undefined,
-      includeGeometry: includeGeometry === 'true',
+      includeGeometry: includeGeometry === 'true' ? true : includeGeometry === 'false' ? false : undefined,
+      zoom: zoom ? Number(zoom) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
   }
@@ -62,5 +68,31 @@ export class ParcelsController {
   @Get('stats')
   stats(@Query('source') source?: string) {
     return this.parcelsService.stats(source);
+  }
+
+  @Get('qhsdd/zones')
+  listQhsddZones(
+    @Query('minLat') minLat?: string,
+    @Query('maxLat') maxLat?: string,
+    @Query('minLng') minLng?: string,
+    @Query('maxLng') maxLng?: string,
+    @Query('landType') landType?: string,
+    @Query('zoom') zoom?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.qhsddService.listInViewport({
+      minLat: minLat ? Number(minLat) : undefined,
+      maxLat: maxLat ? Number(maxLat) : undefined,
+      minLng: minLng ? Number(minLng) : undefined,
+      maxLng: maxLng ? Number(maxLng) : undefined,
+      landType,
+      zoom: zoom ? Number(zoom) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('qhsdd/stats')
+  qhsddStats() {
+    return this.qhsddService.stats();
   }
 }

@@ -10,7 +10,10 @@ import { PropertyBuysController } from './property-buys/property-buys.controller
 import { PropertyBuysService } from './property-buys/property-buys.service';
 import { ElasticService } from './search/elastic.service';
 import { ParcelSearchService } from './search/parcel-search.service';
+import { OsmParcelsService } from './parcels/osm-parcels.service';
+import { QhsddService } from './parcels/qhsdd.service';
 import { DatabaseService } from './shared/database.service';
+import { OsmDatabaseService } from './shared/osm-database.service';
 
 @Module({
   imports: [
@@ -23,6 +26,9 @@ import { DatabaseService } from './shared/database.service';
   controllers: [AuthController, ParcelsController, PropertyBuysController],
   providers: [
     DatabaseService,
+    OsmDatabaseService,
+    OsmParcelsService,
+    QhsddService,
     AuthService,
     ElasticService,
     ParcelSearchService,

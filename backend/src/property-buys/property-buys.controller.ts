@@ -26,4 +26,9 @@ export class PropertyBuysController {
   filterOptions() {
     return this.propertyBuysService.filterOptions();
   }
+
+  @Get('map-points')
+  mapPoints(@Query('limit') limit?: string) {
+    return this.propertyBuysService.mapPoints(limit ? Number(limit) : 100);
+  }
 }

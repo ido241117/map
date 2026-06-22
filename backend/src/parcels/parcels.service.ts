@@ -1,12 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ParcelSearchService } from '../search/parcel-search.service';
 import { DatabaseService } from '../shared/database.service';
+import { OsmParcelsService } from './osm-parcels.service';
 import {
   geometryColumnForSource,
+  isOsmSource,
   parseParcelSource,
   SOURCE_SQL,
   type ParcelSource,
 } from './parcel-sources';
+import {
+  gridCellDegrees,
+  mapViewportMode,
+  shouldIncludeGeometry,
+} from './map-viewport';
 
 type ParcelFilters = {
   source?: string;
@@ -21,6 +28,7 @@ type ParcelFilters = {
   minLng?: number;
   maxLng?: number;
   includeGeometry?: boolean;
+  zoom?: number;
   limit?: number;
 };
 
@@ -38,7 +46,6 @@ type StatsResponse = {
 };
 
 const STATS_TTL_MS = 10 * 60 * 1000;
-const PARCEL_MAX_LIMIT = 5000;
 const SEARCH_MAX_LIMIT = 200;
 
 @Injectable()
@@ -48,10 +55,15 @@ export class ParcelsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly parcelSearch: ParcelSearchService,
+    private readonly osmParcels: OsmParcelsService,
   ) {}
 
   async list(filters: ParcelFilters) {
     const source = parseParcelSource(filters.source);
+    if (isOsmSource(source)) {
+      return this.osmParcels.list(filters);
+    }
+
     const config = SOURCE_SQL[source];
     const where: string[] = [];
     const params: unknown[] = [];
@@ -73,7 +85,7 @@ export class ParcelsService {
 
       if (esIds) {
         if (!esIds.length) {
-          return { source, items: [], truncated: false, returned: 0 };
+          return { source, mode: 'parcels' as const, items: [], clusters: [], truncated: false, returned: 0 };
         }
         return this.listByIds(source, esIds, filters);
       }
@@ -113,16 +125,22 @@ export class ParcelsService {
       where.push(`longitude <= ${addParam(filters.maxLng)}`);
     }
 
-    const includeGeometry = filters.includeGeometry ?? false;
-    const defaultLimit = isSearch ? SEARCH_MAX_LIMIT : PARCEL_MAX_LIMIT;
-    const limit = Math.min(
-      Math.max(filters.limit || defaultLimit, 1),
-      isSearch ? SEARCH_MAX_LIMIT : PARCEL_MAX_LIMIT,
-    );
+    const viewportMode = mapViewportMode(filters.zoom, isSearch);
+    if (viewportMode === 'clusters' && hasBbox) {
+      return this.listClusters(source, config.table, where, params, filters, isSearch);
+    }
 
+    const includeGeometry = shouldIncludeGeometry(
+      filters.zoom,
+      isSearch,
+      filters.includeGeometry,
+    );
+    const limit = this.resolveListLimit(filters, isSearch);
     const geometryColumn = includeGeometry ? geometryColumnForSource(source) : '';
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const orderSql = isSearch ? 'ORDER BY id' : '';
+    const limitSql =
+      limit !== undefined ? `LIMIT ${addParam(limit + 1)}` : '';
 
     const { rows } = await this.db.query(
       `
@@ -132,19 +150,96 @@ export class ParcelsService {
       FROM ${config.table}
       ${whereSql}
       ${orderSql}
-      LIMIT ${addParam(limit + 1)}
+      ${limitSql}
       `,
       params,
     );
 
-    const truncated = rows.length > limit;
+    const truncated = limit !== undefined && rows.length > limit;
     const items = truncated ? rows.slice(0, limit) : rows;
 
-    return { source, items, truncated, returned: items.length };
+    return { source, mode: 'parcels' as const, items, clusters: [], truncated, returned: items.length };
+  }
+
+  /** Search keeps a cap; map viewport loads all rows in bbox (no 5000 cap). */
+  private resolveListLimit(filters: ParcelFilters, isSearch: boolean): number | undefined {
+    if (isSearch) {
+      return Math.min(Math.max(filters.limit || SEARCH_MAX_LIMIT, 1), SEARCH_MAX_LIMIT);
+    }
+    if (filters.limit !== undefined && Number.isFinite(filters.limit)) {
+      return Math.max(filters.limit, 1);
+    }
+    return undefined;
+  }
+
+  private async listClusters(
+    source: Exclude<ParcelSource, 'osm_hcm'>,
+    table: string,
+    where: string[],
+    params: unknown[],
+    filters: ParcelFilters,
+    isSearch: boolean,
+  ) {
+    const cellSize = gridCellDegrees(filters.zoom!);
+    const limit = this.resolveListLimit(filters, isSearch);
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    params.push(cellSize);
+    const cellParam = `$${params.length}`;
+    const limitSql =
+      limit !== undefined
+        ? (() => {
+            params.push(limit + 1);
+            return `LIMIT $${params.length}`;
+          })()
+        : '';
+
+    const { rows } = await this.db.query<{
+      latitude: number;
+      longitude: number;
+      cluster_count: number;
+    }>(
+      `
+      SELECT
+        AVG(latitude)::float AS latitude,
+        AVG(longitude)::float AS longitude,
+        COUNT(*)::int AS cluster_count
+      FROM ${table}
+      ${whereSql}
+      GROUP BY
+        FLOOR(latitude / ${cellParam})::int,
+        FLOOR(longitude / ${cellParam})::int
+      ${limitSql}
+      `,
+      params,
+    );
+
+    const truncated = limit !== undefined && rows.length > limit;
+    const clusters = truncated ? rows.slice(0, limit) : rows;
+    const clusterParcels = clusters.reduce((sum, row) => sum + row.cluster_count, 0);
+
+    return {
+      source,
+      mode: 'clusters' as const,
+      items: [],
+      clusters,
+      truncated,
+      returned: clusters.length,
+      cluster_parcels: clusterParcels,
+    };
   }
 
   async suggestAddress(sourceInput: string | undefined, q: string, limit?: number) {
     const source = parseParcelSource(sourceInput);
+    if (isOsmSource(source)) {
+      const items = await this.osmParcels.suggest(q, limit);
+      return {
+        source,
+        items,
+        engine: 'postgres' as const,
+      };
+    }
+
     const items = await this.parcelSearch.suggest({ source, q, limit });
     return {
       source,
@@ -193,7 +288,9 @@ export class ParcelsService {
 
     return {
       source,
+      mode: 'parcels' as const,
       items: rows,
+      clusters: [],
       truncated: rows.length >= limit,
       returned: rows.length,
     };
@@ -224,6 +321,18 @@ export class ParcelsService {
 
   async stats(sourceInput?: string) {
     const source = parseParcelSource(sourceInput);
+    if (isOsmSource(source)) {
+      const now = Date.now();
+      const cached = this.statsCache.get(source);
+      if (cached && cached.expiresAt > now) {
+        return cached.data;
+      }
+
+      const data = await this.osmParcels.stats();
+      this.statsCache.set(source, { data, expiresAt: now + STATS_TTL_MS });
+      return data;
+    }
+
     const now = Date.now();
     const cached = this.statsCache.get(source);
     if (cached && cached.expiresAt > now) {
