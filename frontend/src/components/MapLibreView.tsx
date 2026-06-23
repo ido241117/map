@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { type GeoJSONSource, type Map, type MapLayerMouseEvent } from 'maplibre-gl';
 import {
+  fetchAdminBounds,
   fetchParcelById,
   fetchParcels,
   fetchPropertyBuyMapPoints,
@@ -194,7 +195,25 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'property-buy-circles', isPropertyBuy);
 }
 
-function buildMapStyle(): maplibregl.StyleSpecification {
+function hasAdminFilter(filters: { district?: string; ward?: string }) {
+  return Boolean(filters.district?.trim() || filters.ward?.trim());
+}
+
+function syncParcelTileSource(
+  map: Map,
+  filters: { district?: string; ward?: string },
+) {
+  const source = map.getSource('parcels') as maplibregl.VectorTileSource | undefined;
+  if (!source || typeof source.setTiles !== 'function') return;
+  source.setTiles([
+    landParcelsTileUrl({
+      district: filters.district,
+      ward: filters.ward,
+    }),
+  ]);
+}
+
+function buildMapStyle(adminFilters?: { district?: string; ward?: string }): maplibregl.StyleSpecification {
   return {
     version: 8,
     glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
@@ -217,7 +236,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
       },
       parcels: {
         type: 'vector',
-        tiles: [landParcelsTileUrl()],
+        tiles: [landParcelsTileUrl(adminFilters)],
         minzoom: LAND_PARCELS_MIN_ZOOM,
         maxzoom: 22,
       },
@@ -386,6 +405,7 @@ export function MapLibreView({
   const searchQueryRef = useRef(searchQuery);
   const showParcelsRef = useRef(showParcels);
   const showQhsddRef = useRef(showQhsdd);
+  const hadAdminFilterRef = useRef(false);
 
   onUpdateRef.current = onUpdate;
   onErrorRef.current = onError;
@@ -401,7 +421,7 @@ export function MapLibreView({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: buildMapStyle(),
+      style: buildMapStyle(filtersRef.current),
       center: HCM_CENTER,
       zoom: 17,
       attributionControl: { compact: true },
@@ -507,10 +527,18 @@ export function MapLibreView({
       }
     });
 
-    const resizeObserver = new ResizeObserver(() => map.resize());
+    let resizeRaf = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        map.resize();
+      });
+    });
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
       resizeObserver.disconnect();
       popupRef.current?.remove();
       popupRef.current = null;
@@ -543,6 +571,56 @@ export function MapLibreView({
       setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
     }
   }, [dataSource, searchQuery, showParcels, showQhsdd]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || dataSource !== 'land_parcels') return;
+
+    const apply = () => syncParcelTileSource(map, filters);
+
+    if (map.isStyleLoaded()) {
+      apply();
+    } else {
+      map.once('load', apply);
+    }
+  }, [dataSource, filters.district, filters.ward]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || dataSource !== 'land_parcels') return;
+
+    if (!hasAdminFilter(filters)) {
+      if (hadAdminFilterRef.current) {
+        map.flyTo({ center: HCM_CENTER, zoom: 12, duration: 500 });
+      }
+      hadAdminFilterRef.current = false;
+      return;
+    }
+
+    hadAdminFilterRef.current = true;
+    const controller = new AbortController();
+    fetchAdminBounds(
+      { district: filters.district, ward: filters.ward },
+      controller.signal,
+    )
+      .then((result) => {
+        if (controller.signal.aborted || !result.bounds) return;
+        const { minLat, maxLat, minLng, maxLng } = result.bounds;
+        map.fitBounds(
+          [
+            [minLng, minLat],
+            [maxLng, maxLat],
+          ],
+          { padding: 48, maxZoom: 16, duration: 500 },
+        );
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        onErrorRef.current(error instanceof Error ? error.message : 'Không tải được vùng bản đồ');
+      });
+
+    return () => controller.abort();
+  }, [dataSource, filters.district, filters.ward]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -599,7 +677,10 @@ export function MapLibreView({
     if (!map || dataSource !== 'property_buy_records') return;
 
     const controller = new AbortController();
-    fetchPropertyBuyMapPoints(5000)
+    fetchPropertyBuyMapPoints(5000, {
+      district: filters.district,
+      ward: filters.ward,
+    })
       .then((result) => {
         if (controller.signal.aborted) return;
         setGeoJsonSource(map, 'property-buy-points', {
@@ -629,7 +710,7 @@ export function MapLibreView({
       });
 
     return () => controller.abort();
-  }, [dataSource, filtersVersion]);
+  }, [dataSource, filters.district, filters.ward, filtersVersion]);
 
   useEffect(() => {
     const map = mapRef.current;

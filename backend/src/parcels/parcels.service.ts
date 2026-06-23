@@ -44,7 +44,7 @@ type StatsResponse = {
 };
 
 const STATS_TTL_MS = 10 * 60 * 1000;
-const SEARCH_MAX_LIMIT = 200;
+const SEARCH_MAX_LIMIT = 10000;
 
 @Injectable()
 export class ParcelsService {
@@ -166,13 +166,70 @@ export class ParcelsService {
     return includeGeometry ? VIEWPORT_GEOMETRY_LIMIT : VIEWPORT_MARKER_LIMIT;
   }
 
-  async suggestAddress(sourceInput: string | undefined, q: string, limit?: number) {
+  async suggestAddress(
+    sourceInput: string | undefined,
+    q: string,
+    limit?: number,
+    district?: string,
+    ward?: string,
+  ) {
     const source = parseParcelSource(sourceInput);
-    const items = await this.parcelSearch.suggest({ source, q, limit });
+    const items = await this.parcelSearch.suggest({ source, q, limit, district, ward });
     return {
       source,
       items: items ?? [],
       engine: items ? 'elasticsearch' : 'unavailable',
+    };
+  }
+
+  async adminBounds(district?: string, ward?: string) {
+    const config = SOURCE_SQL.land_parcels;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (district?.trim()) {
+      params.push(district.trim());
+      conditions.push(`${config.districtColumn} = $${params.length}`);
+    }
+    if (ward?.trim()) {
+      params.push(ward.trim());
+      conditions.push(`${config.wardColumn} = $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { rows } = await this.db.query<{
+      min_lat: number;
+      max_lat: number;
+      min_lng: number;
+      max_lng: number;
+      count: number;
+    }>(
+      `
+      SELECT
+        MIN(latitude)::float AS min_lat,
+        MAX(latitude)::float AS max_lat,
+        MIN(longitude)::float AS min_lng,
+        MAX(longitude)::float AS max_lng,
+        COUNT(*)::int AS count
+      FROM ${config.table}
+      ${where}
+      `,
+      params,
+    );
+
+    const row = rows[0];
+    if (!row?.count) {
+      return { count: 0, bounds: null };
+    }
+
+    return {
+      count: row.count,
+      bounds: {
+        minLat: row.min_lat,
+        maxLat: row.max_lat,
+        minLng: row.min_lng,
+        maxLng: row.max_lng,
+      },
     };
   }
 

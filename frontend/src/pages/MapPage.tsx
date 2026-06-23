@@ -65,7 +65,7 @@ export function MapPage() {
 
     const controller = new AbortController();
     setSuggestLoading(true);
-    fetchParcelAddressSuggest({ source: dataSource, q: query, limit: 10 }, controller.signal)
+    fetchParcelAddressSuggest({ source: dataSource, q: query, limit: 10, district: filters.district, ward: filters.ward }, controller.signal)
       .then((result) => setSuggestions(result.items))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -74,7 +74,7 @@ export function MapPage() {
       .finally(() => setSuggestLoading(false));
 
     return () => controller.abort();
-  }, [debouncedSuggest, dataSource]);
+  }, [debouncedSuggest, dataSource, filters.district, filters.ward]);
 
   const wards = useMemo(() => {
     if (!stats) return [];
@@ -161,8 +161,11 @@ export function MapPage() {
           {!isPropertyBuySource && showsDistrictFilters ? (
             <>
               <Select
+                key={`district-${dataSource}`}
                 className="map-filter-district"
+                placeholder="Quận/huyện"
                 value={filters.district ?? ''}
+                loading={!stats}
                 onChange={(value) => updateFilters({ district: value || undefined, ward: undefined })}
                 options={[
                   { value: '', label: 'Tất cả quận/huyện' },
@@ -173,8 +176,11 @@ export function MapPage() {
                 ]}
               />
               <Select
+                key={`ward-${filters.district ?? '__all__'}`}
                 className="map-filter-ward"
+                placeholder="Phường/xã"
                 value={filters.ward ?? ''}
+                loading={!stats}
                 onChange={(value) => updateFilters({ ward: value || undefined })}
                 options={[
                   { value: '', label: 'Tất cả phường/xã' },

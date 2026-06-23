@@ -17,6 +17,7 @@
     "db:import:append": "node scripts/import-append.js",
     "db:dedupe": "node scripts/dedupe-land-parcels.js",
     "db:fix-geometries": "node scripts/fix-land-parcel-geometries.js",
+    "db:apply-geometry-repair": "node scripts/apply-geometry-repair.js",
     "db:docker:up": "docker compose -f docker-compose.postgis.yml up -d",
     "db:docker:pgadmin": "docker compose -f docker-compose.postgis.yml up -d pgadmin",
     "db:docker:down": "docker compose -f docker-compose.postgis.yml down",

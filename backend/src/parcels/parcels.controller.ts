@@ -56,8 +56,24 @@ export class ParcelsController {
     @Query('source') source?: string,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
+    @Query('district') district?: string,
+    @Query('ward') ward?: string,
   ) {
-    return this.parcelsService.suggestAddress(source, q || '', limit ? Number(limit) : undefined);
+    return this.parcelsService.suggestAddress(
+      source,
+      q || '',
+      limit ? Number(limit) : undefined,
+      district,
+      ward,
+    );
+  }
+
+  @Get('parcels/admin-bounds')
+  adminBounds(
+    @Query('district') district?: string,
+    @Query('ward') ward?: string,
+  ) {
+    return this.parcelsService.adminBounds(district, ward);
   }
 
   @Get('parcels/:id')

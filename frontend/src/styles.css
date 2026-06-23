@@ -57,69 +57,141 @@ body,
   text-align: center;
 }
 
-.app-layout {
+.app-shell {
+  --nav-rail-width: 56px;
   min-height: 100vh;
 }
 
-.app-sider {
+.app-nav {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--nav-rail-width);
+  background: #001529;
+  z-index: 200;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-.app-sider .ant-layout-sider-children {
-  display: flex;
-  flex-direction: column;
+.app-nav.is-expanded {
+  width: 220px;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
 }
 
-.app-brand {
-  height: 64px;
+.app-nav-brand {
+  height: 56px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 20px;
+  padding: 0 16px;
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
-.app-brand-icon {
-  font-size: 22px;
+.app-nav-brand-icon {
+  flex-shrink: 0;
+  font-size: 20px;
   color: #4ade80;
 }
 
-.app-sider .ant-menu {
-  flex: 1;
+.app-nav-brand-title {
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 0;
+  opacity: 0;
 }
 
-.app-sider-footer {
-  padding: 12px;
+.app-nav.is-expanded .app-nav-brand-title {
+  max-width: 140px;
+  opacity: 1;
+}
+
+.app-nav-items {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  min-height: 0;
+}
+
+.app-nav-footer {
+  padding: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex-shrink: 0;
 }
 
-.app-collapse-btn,
-.app-logout-btn {
+.app-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  color: rgba(255, 255, 255, 0.85) !important;
-  justify-content: flex-start;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
 }
 
-.app-user-email {
-  display: block;
-  margin: 4px 0;
-  color: rgba(255, 255, 255, 0.65) !important;
-  font-size: 12px;
+.app-nav-item:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-nav-item.is-active {
+  color: #fff;
+  background: #1677ff;
+}
+
+.app-nav-item-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+}
+
+.app-nav-item-label {
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 0;
+  opacity: 0;
 }
 
-.app-content {
+.app-nav.is-expanded .app-nav-item-label {
+  max-width: 160px;
+  opacity: 1;
+}
+
+.app-main {
+  margin-left: var(--nav-rail-width);
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-view {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
   padding: 16px;
-  min-height: 100vh;
   background: #f8fafc;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-view.is-active {
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .map-page,

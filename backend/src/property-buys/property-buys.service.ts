@@ -126,15 +126,28 @@ export class PropertyBuysService {
     };
   }
 
-  async mapPoints(limit = 100) {
+  async mapPoints(limit = 100, filters: { district?: string; ward?: string } = {}) {
     const safeLimit = Math.max(1, Math.min(5000, limit));
+    const conditions = ['lat IS NOT NULL AND long IS NOT NULL'];
+    const params: unknown[] = [];
+
+    if (filters.district?.trim()) {
+      params.push(filters.district.trim());
+      conditions.push(`district = $${params.length}`);
+    }
+    if (filters.ward?.trim()) {
+      params.push(filters.ward.trim());
+      conditions.push(`ward = $${params.length}`);
+    }
+
+    params.push(safeLimit);
     const result = await this.db.query<MapPoint>(
       `SELECT id, record_id, address, string, lat, long
        FROM property_buy_records
-       WHERE lat IS NOT NULL AND long IS NOT NULL
+       WHERE ${conditions.join(' AND ')}
        ORDER BY id DESC
-       LIMIT $1`,
-      [safeLimit],
+       LIMIT $${params.length}`,
+      params,
     );
 
     return {

@@ -132,33 +132,40 @@ export function PropertyBuyRecordsPage() {
             style={{ maxWidth: 320 }}
           />
           <Select
-            allowClear
             placeholder="Quận/huyện"
             style={{ width: 200 }}
-            value={district}
+            value={district ?? ''}
+            loading={!filterOptions}
             onChange={(value) => {
-              setDistrict(value);
+              setDistrict(value || undefined);
               setWard(undefined);
               setPage(1);
             }}
-            options={filterOptions?.districts.map((item) => ({
-              value: item.district,
-              label: `${item.district} (${item.count})`,
-            }))}
+            options={[
+              { value: '', label: 'Tất cả quận/huyện' },
+              ...(filterOptions?.districts.map((item) => ({
+                value: item.district,
+                label: `${item.district} (${item.count})`,
+              })) ?? []),
+            ]}
           />
           <Select
-            allowClear
+            key={`ward-${district ?? '__all__'}`}
             placeholder="Phường/xã"
             style={{ width: 200 }}
-            value={ward}
+            value={ward ?? ''}
+            loading={!filterOptions}
             onChange={(value) => {
-              setWard(value);
+              setWard(value || undefined);
               setPage(1);
             }}
-            options={wards.map((item) => ({
-              value: item.ward,
-              label: `${item.ward} (${item.count})`,
-            }))}
+            options={[
+              { value: '', label: 'Tất cả phường/xã' },
+              ...wards.map((item) => ({
+                value: item.ward,
+                label: `${item.ward} (${item.count})`,
+              })),
+            ]}
           />
           <Typography.Text type="secondary">{total.toLocaleString('vi-VN')} bản ghi</Typography.Text>
         </div>

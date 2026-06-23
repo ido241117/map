@@ -13,6 +13,11 @@ type MvtQuery = {
   layerName: string;
 };
 
+export type AdminTileFilter = {
+  district?: string;
+  ward?: string;
+};
+
 /** Tile envelope is EPSG:3857; stored geom is EPSG:4326. */
 const TILE_INTERSECTS = 'geom && ST_Transform(ST_TileEnvelope($1, $2, $3), 4326)';
 
@@ -28,13 +33,30 @@ export function buildLandParcelsMvtQuery(
   x: number,
   y: number,
   tolerance: number,
+  admin?: AdminTileFilter,
 ): MvtQuery {
+  const params: unknown[] = [z, x, y];
   const useSimplify = tolerance > 0;
   const toleranceParam = useSimplify ? '$4' : null;
-  const provinceParam = useSimplify ? '$5' : '$4';
-  const params = useSimplify
-    ? [z, x, y, tolerance, HCM_PROVINCE_CODE]
-    : [z, x, y, HCM_PROVINCE_CODE];
+  if (useSimplify) {
+    params.push(tolerance);
+  }
+
+  const conditions = ['geom IS NOT NULL', TILE_INTERSECTS];
+
+  params.push(HCM_PROVINCE_CODE);
+  conditions.unshift(`province_code = $${params.length}`);
+
+  if (admin?.district?.trim()) {
+    params.push(admin.district.trim());
+    conditions.push(`district = $${params.length}`);
+  }
+  if (admin?.ward?.trim()) {
+    params.push(admin.ward.trim());
+    conditions.push(`ward = $${params.length}`);
+  }
+
+  const whereSql = conditions.join('\n          AND ');
 
   return {
     layerName: LAND_PARCELS_LAYER,
@@ -47,9 +69,7 @@ export function buildLandParcelsMvtQuery(
           property_code,
           ${buildGeomSql(toleranceParam)} AS geom
         FROM land_parcels
-        WHERE province_code = ${provinceParam}
-          AND geom IS NOT NULL
-          AND ${TILE_INTERSECTS}
+        WHERE ${whereSql}
       ) AS mvt_row
     `,
   };
@@ -90,9 +110,10 @@ export function buildMvtQuery(
   x: number,
   y: number,
   tolerance: number,
+  admin?: AdminTileFilter,
 ): MvtQuery {
   if (kind === 'land-parcels') {
-    return buildLandParcelsMvtQuery(z, x, y, tolerance);
+    return buildLandParcelsMvtQuery(z, x, y, tolerance, admin);
   }
   return buildQhsddMvtQuery(z, x, y, tolerance);
 }

@@ -119,8 +119,18 @@ export async function fetchMe(): Promise<User> {
   return apiFetch<User>('/auth/me');
 }
 
+export type AdminBounds = {
+  count: number;
+  bounds: {
+    minLat: number;
+    maxLat: number;
+    minLng: number;
+    maxLng: number;
+  } | null;
+};
+
 export async function fetchParcelAddressSuggest(
-  query: Pick<ParcelQuery, 'source' | 'q'> & { limit?: number },
+  query: Pick<ParcelQuery, 'source' | 'q' | 'district' | 'ward'> & { limit?: number },
   signal?: AbortSignal,
 ): Promise<ParcelAddressSuggestResponse> {
   const qs = toQueryString(query);
@@ -147,6 +157,14 @@ export async function fetchParcelById(
 export async function fetchStats(source: ParcelSource = 'land_parcels'): Promise<Stats> {
   const qs = toQueryString({ source });
   return apiFetch<Stats>(`/stats?${qs}`);
+}
+
+export async function fetchAdminBounds(
+  query: Pick<ParcelQuery, 'district' | 'ward'>,
+  signal?: AbortSignal,
+): Promise<AdminBounds> {
+  const qs = toQueryString(query);
+  return apiFetch<AdminBounds>(`/parcels/admin-bounds?${qs}`, { signal });
 }
 
 export type QhsddZoneQuery = {
@@ -180,7 +198,10 @@ export async function fetchPropertyBuyFilterOptions(): Promise<PropertyBuyFilter
   return apiFetch<PropertyBuyFilterOptions>('/property-buy-records/filter-options');
 }
 
-export async function fetchPropertyBuyMapPoints(limit = 100): Promise<PropertyBuyMapPointResponse> {
-  const qs = toQueryString({ limit });
+export async function fetchPropertyBuyMapPoints(
+  limit = 100,
+  query: Pick<PropertyBuyQuery, 'district' | 'ward'> = {},
+): Promise<PropertyBuyMapPointResponse> {
+  const qs = toQueryString({ limit, ...query });
   return apiFetch<PropertyBuyMapPointResponse>(`/property-buy-records/map-points?${qs}`);
 }

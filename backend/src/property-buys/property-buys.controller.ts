@@ -28,7 +28,11 @@ export class PropertyBuysController {
   }
 
   @Get('map-points')
-  mapPoints(@Query('limit') limit?: string) {
-    return this.propertyBuysService.mapPoints(limit ? Number(limit) : 100);
+  mapPoints(
+    @Query('limit') limit?: string,
+    @Query('district') district?: string,
+    @Query('ward') ward?: string,
+  ) {
+    return this.propertyBuysService.mapPoints(limit ? Number(limit) : 100, { district, ward });
   }
 }

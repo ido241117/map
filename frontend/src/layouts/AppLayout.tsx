@@ -1,96 +1,115 @@
-import { useMemo, useState } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Typography, Button } from 'antd';
+import { memo, useCallback, useState } from 'react';
+import { NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ShoppingOutlined,
-  UserOutlined,
   GlobalOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+import { MapPage } from '../pages/MapPage';
+import { PropertyBuyRecordsPage } from '../pages/PropertyBuyRecordsPage';
 
-const { Sider, Content } = Layout;
+const NAV_RAIL_WIDTH = 56;
 
-const menuItems = [
-  { key: '/map', icon: <GlobalOutlined />, label: <Link to="/map">Bản đồ</Link> },
-  {
-    key: '/property-buys',
-    icon: <ShoppingOutlined />,
-    label: <Link to="/property-buys">Giao dịch mua</Link>,
-  },
-];
+const navItems = [
+  { to: '/map', icon: GlobalOutlined, label: 'Bản đồ' },
+  { to: '/property-buys', icon: ShoppingOutlined, label: 'Giao dịch mua' },
+] as const;
 
-export function AppLayout() {
-  const [collapsed, setCollapsed] = useState(false);
-  const location = useLocation();
+const PersistentMapPage = memo(MapPage);
+const PersistentPropertyBuysPage = memo(PropertyBuyRecordsPage);
+
+function AppSidebar() {
+  const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
 
-  const selectedKey = useMemo(() => {
-    if (location.pathname.startsWith('/property-buys')) return '/property-buys';
-    return '/map';
-  }, [location.pathname]);
-
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await logout();
     navigate('/login');
-  };
+  }, [logout, navigate]);
 
   return (
-    <Layout className="app-layout">
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        trigger={null}
-        width={240}
-        className="app-sider"
-      >
-        <div className="app-brand">
-          <GlobalOutlined className="app-brand-icon" />
-          {!collapsed ? <span>HCM Land</span> : null}
-        </div>
+    <aside className={`app-nav${expanded ? ' is-expanded' : ''}`}>
+      <div className="app-nav-brand">
+        <GlobalOutlined className="app-nav-brand-icon" aria-hidden />
+        <span className="app-nav-brand-title">HCM Land</span>
+      </div>
 
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          items={menuItems}
-        />
-
-        <div className="app-sider-footer">
-          <Button
-            type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed((value) => !value)}
-            className="app-collapse-btn"
-            aria-label={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+      <nav className="app-nav-items" aria-label="Điều hướng chính">
+        {navItems.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) => `app-nav-item${isActive ? ' is-active' : ''}`}
+            title={label}
           >
-            {!collapsed ? 'Thu gọn' : null}
-          </Button>
-          {!collapsed ? (
-            <Typography.Text type="secondary" className="app-user-email">
-              <UserOutlined /> {user?.displayName || user?.email}
-            </Typography.Text>
-          ) : null}
-          <Button
-            type="text"
-            icon={<LogoutOutlined />}
-            onClick={() => void handleLogout()}
-            className="app-logout-btn"
-          >
-            {!collapsed ? 'Đăng xuất' : null}
-          </Button>
-        </div>
-      </Sider>
+            <Icon className="app-nav-item-icon" aria-hidden />
+            <span className="app-nav-item-label">{label}</span>
+          </NavLink>
+        ))}
+      </nav>
 
-      <Layout>
-        <Content className="app-content">
-          <Outlet />
-        </Content>
-      </Layout>
-    </Layout>
+      <div className="app-nav-footer">
+        <button
+          type="button"
+          className="app-nav-item"
+          onClick={() => setExpanded((value) => !value)}
+          aria-label={expanded ? 'Thu gọn sidebar' : 'Mở rộng sidebar'}
+          title={expanded ? 'Thu gọn' : 'Mở rộng'}
+        >
+          {expanded ? (
+            <MenuFoldOutlined className="app-nav-item-icon" aria-hidden />
+          ) : (
+            <MenuUnfoldOutlined className="app-nav-item-icon" aria-hidden />
+          )}
+          <span className="app-nav-item-label">{expanded ? 'Thu gọn' : 'Mở rộng'}</span>
+        </button>
+        <button
+          type="button"
+          className="app-nav-item"
+          onClick={() => void handleLogout()}
+          aria-label="Đăng xuất"
+          title="Đăng xuất"
+        >
+          <LogoutOutlined className="app-nav-item-icon" aria-hidden />
+          <span className="app-nav-item-label">Đăng xuất</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+export function AppLayout() {
+  const location = useLocation();
+  const path = location.pathname;
+
+  if (path === '/' || path === '') {
+    return <Navigate to="/map" replace />;
+  }
+
+  if (path !== '/map' && !path.startsWith('/property-buys')) {
+    return <Navigate to="/map" replace />;
+  }
+
+  const activeView = path.startsWith('/property-buys') ? 'property-buys' : 'map';
+
+  return (
+    <div className="app-shell">
+      <AppSidebar />
+      <main className="app-main">
+        <div className={`app-view${activeView === 'map' ? ' is-active' : ''}`} aria-hidden={activeView !== 'map'}>
+          <PersistentMapPage />
+        </div>
+        <div
+          className={`app-view${activeView === 'property-buys' ? ' is-active' : ''}`}
+          aria-hidden={activeView !== 'property-buys'}
+        >
+          <PersistentPropertyBuysPage />
+        </div>
+      </main>
+    </div>
   );
 }

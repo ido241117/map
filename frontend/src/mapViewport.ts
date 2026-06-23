@@ -1,7 +1,7 @@
 /** Zoom ≥ GEOMETRY_MIN_ZOOM: hiện ranh thửa (MultiPolygon). Zoom nhỏ hơn: chỉ lớp quy hoạch. */
 export const GEOMETRY_MIN_ZOOM = 16;
 export const QHSDD_MIN_ZOOM = 8;
-export const QHSDD_LABEL_MIN_ZOOM = 17;
+export const QHSDD_LABEL_MIN_ZOOM = 16;
 
 export function shouldShowQhsddOverlay(source: string | undefined, _zoom: number, isSearch: boolean) {
   if (isSearch) return false;

@@ -21,8 +21,12 @@ function absoluteApiBase(): string {
   return `${window.location.origin}${path}`.replace(/\/$/, '');
 }
 
-export function landParcelsTileUrl() {
-  return `${absoluteApiBase()}/tiles/land-parcels/{z}/{x}/{y}`;
+export function landParcelsTileUrl(filters?: { district?: string; ward?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.district) params.set('district', filters.district);
+  if (filters?.ward) params.set('ward', filters.ward);
+  const qs = params.toString();
+  return `${absoluteApiBase()}/tiles/land-parcels/{z}/{x}/{y}${qs ? `?${qs}` : ''}`;
 }
 
 export function qhsddTileUrl() {

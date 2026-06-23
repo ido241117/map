@@ -37,7 +37,7 @@ export class ParcelSearchService {
     const query = normalizeSearchQuery(filters.q);
     if (!query) return [];
 
-    const limit = Math.min(Math.max(filters.limit || 200, 1), 200);
+    const limit = Math.min(Math.max(filters.limit || 200, 1), 10000);
     const must: Record<string, unknown>[] = [
       {
         multi_match: {
@@ -87,6 +87,8 @@ export class ParcelSearchService {
     source?: string;
     q: string;
     limit?: number;
+    district?: string;
+    ward?: string;
   }): Promise<ParcelSearchHit[] | null> {
     const available = await this.elastic.isAvailable();
     if (!available) return null;
@@ -96,6 +98,14 @@ export class ParcelSearchService {
     if (query.length < 2) return [];
 
     const limit = Math.min(Math.max(filters.limit || 10, 1), 20);
+    const filter: Record<string, unknown>[] = [{ term: { source } }];
+
+    if (filters.district?.trim()) {
+      filter.push({ term: { district: filters.district.trim() } });
+    }
+    if (filters.ward?.trim()) {
+      filter.push({ term: { ward: filters.ward.trim() } });
+    }
 
     const result = await this.elastic.search<{
       id: number;
@@ -127,7 +137,7 @@ export class ParcelSearchService {
               },
             },
           ],
-          filter: [{ term: { source } }],
+          filter,
         },
       },
       _source: [

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Query,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -45,9 +46,14 @@ export class TilesController {
     @Param('x') x: string,
     @Param('y') y: string,
     @Res() res: Response,
+    @Query('district') district?: string,
+    @Query('ward') ward?: string,
   ) {
     const coords = parseCoords(z, x, y);
-    const tile = await this.tilesService.getMvtTile('land-parcels', coords.z, coords.x, coords.y);
+    const tile = await this.tilesService.getMvtTile('land-parcels', coords.z, coords.x, coords.y, {
+      district,
+      ward,
+    });
     sendMvt(res, tile);
   }
 
