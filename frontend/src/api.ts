@@ -1,5 +1,6 @@
 import type {
   AuthResponse,
+  Parcel,
   ParcelAddressSuggestResponse,
   ParcelListResponse,
   ParcelSource,
@@ -132,6 +133,15 @@ export async function fetchParcels(
 ): Promise<ParcelListResponse> {
   const qs = toQueryString(query);
   return apiFetch<ParcelListResponse>(`/parcels${qs ? `?${qs}` : ''}`, { signal });
+}
+
+export async function fetchParcelById(
+  id: number,
+  source: ParcelSource = 'land_parcels',
+  signal?: AbortSignal,
+): Promise<Parcel> {
+  const qs = toQueryString({ source });
+  return apiFetch<Parcel>(`/parcels/${id}?${qs}`, { signal });
 }
 
 export async function fetchStats(source: ParcelSource = 'land_parcels'): Promise<Stats> {

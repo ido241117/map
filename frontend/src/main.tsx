@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import viVN from 'antd/locale/vi_VN';
-import 'leaflet/dist/leaflet.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './styles.css';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';

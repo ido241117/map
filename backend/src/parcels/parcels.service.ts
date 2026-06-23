@@ -8,10 +8,7 @@ import {
   type ParcelSource,
 } from './parcel-sources';
 import {
-  gridCellDegrees,
-  mapViewportMode,
   shouldIncludeGeometry,
-  VIEWPORT_CLUSTER_LIMIT,
   VIEWPORT_GEOMETRY_LIMIT,
   VIEWPORT_MARKER_LIMIT,
 } from './map-viewport';
@@ -121,17 +118,12 @@ export class ParcelsService {
       where.push(`longitude <= ${addParam(filters.maxLng)}`);
     }
 
-    const viewportMode = mapViewportMode(filters.zoom, isSearch);
-    if (viewportMode === 'clusters' && hasBbox) {
-      return this.listClusters(source, config.table, where, params, filters, isSearch);
-    }
-
     const includeGeometry = shouldIncludeGeometry(
       filters.zoom,
       isSearch,
       filters.includeGeometry,
     );
-    const limit = this.resolveListLimit(filters, isSearch, hasBbox, includeGeometry, viewportMode);
+    const limit = this.resolveListLimit(filters, isSearch, hasBbox, includeGeometry);
     const geometryColumn = includeGeometry ? geometryColumnForSource(source) : '';
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const orderSql = isSearch ? 'ORDER BY id' : '';
@@ -163,7 +155,6 @@ export class ParcelsService {
     isSearch: boolean,
     hasBbox: boolean,
     includeGeometry: boolean,
-    viewportMode: 'clusters' | 'parcels',
   ): number | undefined {
     if (isSearch) {
       return Math.min(Math.max(filters.limit || SEARCH_MAX_LIMIT, 1), SEARCH_MAX_LIMIT);
@@ -172,65 +163,7 @@ export class ParcelsService {
       return Math.max(filters.limit, 1);
     }
     if (!hasBbox) return undefined;
-    if (viewportMode === 'clusters') return VIEWPORT_CLUSTER_LIMIT;
     return includeGeometry ? VIEWPORT_GEOMETRY_LIMIT : VIEWPORT_MARKER_LIMIT;
-  }
-
-  private async listClusters(
-    source: ParcelSource,
-    table: string,
-    where: string[],
-    params: unknown[],
-    filters: ParcelFilters,
-    isSearch: boolean,
-  ) {
-    const cellSize = gridCellDegrees(filters.zoom!);
-    const limit = this.resolveListLimit(filters, isSearch, true, false, 'clusters');
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-
-    params.push(cellSize);
-    const cellParam = `$${params.length}`;
-    const limitSql =
-      limit !== undefined
-        ? (() => {
-            params.push(limit + 1);
-            return `LIMIT $${params.length}`;
-          })()
-        : '';
-
-    const { rows } = await this.db.query<{
-      latitude: number;
-      longitude: number;
-      cluster_count: number;
-    }>(
-      `
-      SELECT
-        AVG(latitude)::float AS latitude,
-        AVG(longitude)::float AS longitude,
-        COUNT(*)::int AS cluster_count
-      FROM ${table}
-      ${whereSql}
-      GROUP BY
-        FLOOR(latitude / ${cellParam})::int,
-        FLOOR(longitude / ${cellParam})::int
-      ${limitSql}
-      `,
-      params,
-    );
-
-    const truncated = limit !== undefined && rows.length > limit;
-    const clusters = truncated ? rows.slice(0, limit) : rows;
-    const clusterParcels = clusters.reduce((sum, row) => sum + row.cluster_count, 0);
-
-    return {
-      source,
-      mode: 'clusters' as const,
-      items: [],
-      clusters,
-      truncated,
-      returned: clusters.length,
-      cluster_parcels: clusterParcels,
-    };
   }
 
   async suggestAddress(sourceInput: string | undefined, q: string, limit?: number) {

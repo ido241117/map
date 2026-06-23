@@ -19,16 +19,17 @@ import {
   pruneParcelStore,
   resolveParcelLimit,
   VIEWPORT_FETCH_PAD,
+  VIEWPORT_RENDER_PAD,
 } from '../mapViewportCache';
-import type { MapCluster, Parcel, ParcelListResponse, QhsddZone } from '../types';
+import type { Parcel, ParcelListResponse, QhsddZone } from '../types';
 
 const MARKER_CHUNK = 600;
 const GEOMETRY_CHUNK = 400;
-const CLUSTER_CHUNK = 120;
 const QHSDD_CHUNK = 250;
 
 const QHSDD_PANE = 'qhsdd-overlay-pane';
 const PARCEL_PANE = 'parcel-interactive-pane';
+const SELECTED_PARCEL_PANE = 'parcel-selected-pane';
 
 const POLYGON_STYLE: L.PathOptions = {
   color: '#14532d',
@@ -56,18 +57,28 @@ const PROPERTY_BUY_MARKER_STYLE: L.CircleMarkerOptions = {
   fillOpacity: 0.8,
 };
 
-function clusterRadius(count: number) {
-  return Math.min(28, 10 + Math.log10(Math.max(count, 1)) * 5);
-}
+const SELECTED_HIGHLIGHT_STYLE: L.PathOptions = {
+  color: '#e11d48',
+  fillColor: '#fb7185',
+  fillOpacity: 0.25,
+  weight: 2,
+  opacity: 1,
+  interactive: false,
+};
 
-function clusterPopupHtml(cluster: MapCluster) {
-  return `
-    <div class="popup">
-      <strong>${formatNumber(cluster.cluster_count)} thửa</strong>
-      <span>Zoom in (≥16) để xem ranh thửa</span>
-    </div>
-  `;
-}
+const SELECTED_MARKER_STYLE: L.CircleMarkerOptions = {
+  radius: 9,
+  color: '#e11d48',
+  weight: 2,
+  fillColor: '#ffffff',
+  fillOpacity: 0.95,
+};
+
+type ParcelSelectionState = {
+  highlight: L.Layer | null;
+  marker: L.CircleMarker | null;
+  markerRestStyle: L.CircleMarkerOptions | null;
+};
 
 function formatNumber(value: number | string | undefined) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0));
@@ -109,35 +120,98 @@ function buildFilterKey(filters: Omit<ParcelQuery, 'minLat' | 'maxLat' | 'minLng
   });
 }
 
-function bindParcelInteraction(map: L.Map, layer: L.Layer, parcel: Parcel) {
-  layer.on('click', (event: L.LeafletMouseEvent) => {
-    L.popup(POPUP_OPTIONS)
-      .setLatLng(event.latlng)
-      .setContent(popupHtml(parcel))
-      .openOn(map);
-  });
+function popupHtml(parcel: Parcel) {
+  const location = [parcel.ward, parcel.district].filter(Boolean).join(', ');
+  return `
+    <div class="parcel-popup popup">
+      <strong>${escapeHtml(parcel.address || parcel.property_code || 'Thửa đất')}</strong>
+      <div>Mã: ${escapeHtml(parcel.property_code || '—')}</div>
+      <div>Diện tích: ${formatNumber(parcel.total_area)} m²</div>
+      <div>Loại đất: ${escapeHtml(parcel.planning_land_type || '—')}</div>
+      ${location ? `<div>${escapeHtml(location)}</div>` : ''}
+    </div>
+  `;
 }
 
 const POPUP_OPTIONS: L.PopupOptions = {
   maxWidth: 320,
-  autoPan: false,
+  autoPan: true,
+  autoPanPadding: [48, 48],
 };
 
-function popupHtml(parcel: Parcel) {
-  return `
-    <div class="popup">
-      <strong>${parcel.address || parcel.property_code || 'Thửa đất'}</strong>
-      <span>Mã: ${parcel.property_code || '—'}</span>
-      <span>Diện tích: ${formatNumber(parcel.total_area)} m²</span>
-      <span>Loại đất: ${parcel.planning_land_type || '—'}</span>
-      <span>${parcel.ward || ''}${parcel.ward && parcel.district ? ', ' : ''}${parcel.district || ''}</span>
-    </div>
-  `;
+function clearParcelSelection(map: L.Map, selection: ParcelSelectionState) {
+  if (selection.highlight) {
+    map.removeLayer(selection.highlight);
+    selection.highlight = null;
+  }
+  if (selection.marker && selection.markerRestStyle) {
+    selection.marker.setStyle(selection.markerRestStyle);
+    selection.marker = null;
+    selection.markerRestStyle = null;
+  }
+}
+
+function addParcelHighlight(
+  map: L.Map,
+  parcel: Parcel,
+  renderer: L.Renderer,
+): L.Layer | null {
+  if (!parcel.geometry_json) return null;
+
+  const layer = L.geoJSON(parcel.geometry_json, {
+    pane: SELECTED_PARCEL_PANE,
+    interactive: false,
+    style: () => ({ ...SELECTED_HIGHLIGHT_STYLE, renderer }),
+  });
+  layer.addTo(map);
+  return layer;
+}
+
+function bindParcelLayer(
+  layer: L.Layer,
+  parcel: Parcel,
+  onSelect: (parcel: Parcel, layer: L.Layer, latlng: L.LatLng) => void,
+) {
+  const attach = (target: L.Layer) => {
+    target.bindPopup(popupHtml(parcel), POPUP_OPTIONS);
+    target.on('click', (event: L.LeafletMouseEvent) => {
+      L.DomEvent.stopPropagation(event);
+      onSelect(parcel, target, event.latlng);
+    });
+  };
+
+  if (layer instanceof L.LayerGroup) {
+    layer.getLayers().forEach(attach);
+    return;
+  }
+
+  attach(layer);
 }
 
 function isMapPopupOpen(map: L.Map) {
   const popup = (map as L.Map & { _popup?: L.Popup })._popup;
   return Boolean(popup?.isOpen());
+}
+
+/** Leaflet Canvas leaves full-pane <canvas> hit targets; stale ones block parcel clicks after pan. */
+function pruneStaleParcelCanvases(map: L.Map, keep?: L.Canvas | null) {
+  const pane = map.getPane(PARCEL_PANE);
+  if (!pane) return;
+
+  const keepContainer = keep
+    ? (keep as L.Canvas & { _container?: HTMLElement })._container
+    : null;
+
+  pane.querySelectorAll('canvas.leaflet-zoom-animated').forEach((canvas) => {
+    if (canvas !== keepContainer) {
+      canvas.remove();
+    }
+  });
+}
+
+function visibleParcelRenderKey(parcels: Parcel[], showGeometry: boolean) {
+  if (!parcels.length) return `empty:${showGeometry}`;
+  return `${showGeometry}:${parcels.length}:${parcels[0]?.id}:${parcels[parcels.length - 1]?.id}`;
 }
 
 type MapDataLayerProps = {
@@ -163,9 +237,14 @@ export function MapDataLayer({
   const lastQhsddZonesRef = useRef<QhsddZone[]>([]);
   const qhsddLabelsVisibleRef = useRef(false);
   const propertyBuyLayerRef = useRef<L.LayerGroup | null>(null);
-  const pointRendererRef = useRef(L.canvas({ padding: 0.25, pane: PARCEL_PANE }));
-  const polygonRendererRef = useRef(L.canvas({ padding: 0.35, pane: PARCEL_PANE }));
+  /** Canvas cho marker (chỉ tìm kiếm); polygon dùng SVG. */
+  const parcelCanvasRendererRef = useRef(L.canvas({ padding: 0.35, pane: PARCEL_PANE }));
+  /** SVG polygons avoid full-pane canvas hit layers that steal clicks after pan. */
+  const parcelSvgRendererRef = useRef(L.svg({ pane: PARCEL_PANE }));
+  const highlightRendererRef = useRef(L.svg({ pane: SELECTED_PARCEL_PANE }));
   const qhsddRendererRef = useRef(L.canvas({ padding: 0.35, pane: QHSDD_PANE }));
+  const parcelRenderModeRef = useRef<'canvas' | 'svg' | null>(null);
+  const lastParcelRenderKeyRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<number | null>(null);
   const requestIdRef = useRef(0);
@@ -191,6 +270,39 @@ export function MapDataLayer({
   const skipViewportCacheRef = useRef(false);
   const suppressEventsRef = useRef(false);
   const pendingAfterPopupRef = useRef(false);
+  const parcelSelectionRef = useRef<ParcelSelectionState>({
+    highlight: null,
+    marker: null,
+    markerRestStyle: null,
+  });
+
+  const selectParcel = useCallback((parcel: Parcel, layer: L.Layer, latlng: L.LatLng) => {
+    clearParcelSelection(map, parcelSelectionRef.current);
+
+    if ('openPopup' in layer && typeof layer.openPopup === 'function') {
+      layer.openPopup(latlng);
+    } else {
+      L.popup(POPUP_OPTIONS)
+        .setLatLng(latlng)
+        .setContent(popupHtml(parcel))
+        .openOn(map);
+    }
+
+    const highlight = addParcelHighlight(map, parcel, highlightRendererRef.current);
+    if (highlight) {
+      parcelSelectionRef.current.highlight = highlight;
+    }
+
+    if (layer instanceof L.CircleMarker) {
+      parcelSelectionRef.current.marker = layer;
+      parcelSelectionRef.current.markerRestStyle = { ...MARKER_STYLE };
+      layer.setStyle(SELECTED_MARKER_STYLE);
+      layer.bringToFront();
+    }
+  }, [map]);
+
+  const selectParcelRef = useRef(selectParcel);
+  selectParcelRef.current = selectParcel;
 
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
@@ -308,6 +420,18 @@ export function MapDataLayer({
       layerRef.current = L.layerGroup().addTo(map);
     }
 
+    const renderKey = visibleParcelRenderKey(parcels, showGeometry);
+    if (renderKey === lastParcelRenderKeyRef.current) {
+      return;
+    }
+    lastParcelRenderKeyRef.current = renderKey;
+
+    const nextMode = showGeometry ? 'svg' : 'canvas';
+    if (parcelRenderModeRef.current !== nextMode) {
+      parcelRenderModeRef.current = nextMode;
+      pruneStaleParcelCanvases(map, nextMode === 'canvas' ? parcelCanvasRendererRef.current : null);
+    }
+
     const group = layerRef.current;
     const gen = ++renderGenRef.current;
     const staging = L.layerGroup();
@@ -316,17 +440,23 @@ export function MapDataLayer({
       if (gen !== renderGenRef.current) return;
       group.clearLayers();
       staging.eachLayer((layer) => layer.addTo(group));
+      if (!showGeometry) {
+        pruneStaleParcelCanvases(map, parcelCanvasRendererRef.current);
+      } else {
+        pruneStaleParcelCanvases(map, null);
+      }
     };
 
     if (showGeometry) {
       const withGeometry = parcels.filter((p) => p.geometry_json);
       if (!withGeometry.length) {
         group.clearLayers();
+        lastParcelRenderKeyRef.current = '';
         return;
       }
 
       let index = 0;
-      const renderer = polygonRendererRef.current;
+      const renderer = parcelSvgRendererRef.current;
 
       const step = () => {
         if (gen !== renderGenRef.current) return;
@@ -348,7 +478,9 @@ export function MapDataLayer({
           pane: PARCEL_PANE,
           style: () => ({ ...POLYGON_STYLE, renderer }),
           onEachFeature: (feature, layer) => {
-            bindParcelInteraction(map, layer, feature.properties as Parcel);
+            bindParcelLayer(layer, feature.properties as Parcel, (parcel, target, latlng) => {
+              selectParcelRef.current(parcel, target, latlng);
+            });
           },
         }).addTo(staging);
 
@@ -363,7 +495,7 @@ export function MapDataLayer({
       return;
     }
 
-    const renderer = pointRendererRef.current;
+    const renderer = parcelCanvasRendererRef.current;
     let index = 0;
 
     const step = () => {
@@ -377,7 +509,14 @@ export function MapDataLayer({
           pane: PARCEL_PANE,
           renderer,
         });
-        bindParcelInteraction(map, marker, parcel);
+        marker.bindTooltip(parcel.property_code || 'Thửa đất', {
+          direction: 'top',
+          offset: [0, -6],
+          opacity: 0.92,
+        });
+        bindParcelLayer(marker, parcel, (p, target, latlng) => {
+          selectParcelRef.current(p, target, latlng);
+        });
         marker.addTo(staging);
       }
 
@@ -391,77 +530,26 @@ export function MapDataLayer({
     requestAnimationFrame(step);
   }, [map]);
 
-  const renderClusters = useCallback((clusters: MapCluster[]) => {
-    if (!layerRef.current) {
-      layerRef.current = L.layerGroup().addTo(map);
+  const clearParcelLayers = useCallback(() => {
+    renderGenRef.current += 1;
+    lastParcelRenderKeyRef.current = '';
+    parcelRenderModeRef.current = null;
+    pruneStaleParcelCanvases(map, null);
+    if (layerRef.current) {
+      layerRef.current.clearLayers();
     }
-
-    const group = layerRef.current;
-    const gen = ++renderGenRef.current;
-    const staging = L.layerGroup();
-    if (!clusters.length) {
-      group.clearLayers();
-      return;
-    }
-
-    const commitStaging = () => {
-      if (gen !== renderGenRef.current) return;
-      group.clearLayers();
-      staging.eachLayer((layer) => layer.addTo(group));
-    };
-
-    const renderer = pointRendererRef.current;
-    let index = 0;
-
-    const step = () => {
-      if (gen !== renderGenRef.current) return;
-
-      const end = Math.min(index + CLUSTER_CHUNK, clusters.length);
-      for (; index < end; index += 1) {
-        const cluster = clusters[index];
-        const radius = clusterRadius(cluster.cluster_count);
-        L.circleMarker([cluster.latitude, cluster.longitude], {
-          radius,
-          fillColor: '#16a34a',
-          color: '#14532d',
-          weight: 1.5,
-          opacity: 0.9,
-          fillOpacity: 0.55,
-          pane: PARCEL_PANE,
-          renderer,
-        })
-          .bindPopup(clusterPopupHtml(cluster), POPUP_OPTIONS)
-          .addTo(staging);
-
-        if (cluster.cluster_count >= 20) {
-          L.marker([cluster.latitude, cluster.longitude], {
-            pane: PARCEL_PANE,
-            icon: L.divIcon({
-              className: 'parcel-cluster-label',
-              html: `<span>${formatNumber(cluster.cluster_count)}</span>`,
-              iconSize: [40, 20],
-              iconAnchor: [20, 10],
-            }),
-            interactive: false,
-          }).addTo(staging);
-        }
-      }
-
-      if (index < clusters.length) {
-        requestAnimationFrame(step);
-      } else {
-        commitStaging();
-      }
-    };
-
-    requestAnimationFrame(step);
+    loadedParcelsRef.current.clear();
+    parcelCacheRef.current = null;
+    clearParcelSelection(map, parcelSelectionRef.current);
   }, [map]);
 
   const renderVisibleParcels = useCallback((viewBounds: L.LatLngBounds, showGeometry: boolean) => {
-    const visible = filterParcelsInBounds(
-      loadedParcelsRef.current.values(),
-      expandBounds(viewBounds, 0.15),
-    );
+    const cacheBounds = parcelCacheRef.current?.fetchBounds;
+    const clipBounds =
+      cacheBounds && boundsContains(cacheBounds, viewBounds)
+        ? cacheBounds
+        : expandBounds(viewBounds, VIEWPORT_RENDER_PAD);
+    const visible = filterParcelsInBounds(loadedParcelsRef.current.values(), clipBounds);
     renderParcels(visible, showGeometry);
     return visible;
   }, [renderParcels]);
@@ -475,6 +563,11 @@ export function MapDataLayer({
     if (!map.getPane(PARCEL_PANE)) {
       const pane = map.createPane(PARCEL_PANE);
       pane.style.zIndex = '450';
+    }
+    if (!map.getPane(SELECTED_PARCEL_PANE)) {
+      const pane = map.createPane(SELECTED_PARCEL_PANE);
+      pane.style.zIndex = '480';
+      pane.style.pointerEvents = 'none';
     }
     if (!map.getPane(PROPERTY_BUY_PANE)) {
       const pane = map.createPane(PROPERTY_BUY_PANE);
@@ -490,6 +583,16 @@ export function MapDataLayer({
       qhsddLabelsLayerRef.current = L.layerGroup().addTo(map);
     }
   }, [map, PROPERTY_BUY_PANE]);
+
+  useEffect(() => {
+    const onPopupClose = () => {
+      clearParcelSelection(map, parcelSelectionRef.current);
+    };
+    map.on('popupclose', onPopupClose);
+    return () => {
+      map.off('popupclose', onPopupClose);
+    };
+  }, [map]);
 
   useEffect(() => {
     const pane = map.getPane(PROPERTY_BUY_PANE);
@@ -551,6 +654,9 @@ export function MapDataLayer({
     if (propertyBuyLayerRef.current) {
       propertyBuyLayerRef.current.clearLayers();
     }
+    if (!showParcels && !isAddressSearch) {
+      clearParcelLayers();
+    }
     if (!showQhsdd && qhsddLayerRef.current) {
       qhsddLayerRef.current.clearLayers();
     }
@@ -602,8 +708,7 @@ export function MapDataLayer({
 
     const fetchBounds = expandBounds(viewBounds, VIEWPORT_FETCH_PAD);
     const bboxQuery = boundsToQuery(fetchBounds, zoom);
-    const parcelMode = zoomBucket === 'clusters' ? 'clusters' : 'parcels';
-    const parcelLimit = resolveParcelLimit(showGeometry, parcelMode);
+    const parcelLimit = resolveParcelLimit(showGeometry);
 
     const query: ParcelQuery = {
       ...current,
@@ -670,12 +775,13 @@ export function MapDataLayer({
             mergeParcelsIntoStore(loadedParcelsRef.current, result.items);
           }
           onUpdateRef.current(result, zoom);
-          if (result.mode === 'clusters') {
-            renderClusters(result.clusters);
-          } else {
-            renderParcels(result.items, showGeometry);
-          }
+          renderParcels(result.items, showGeometry);
         }
+      } else if (!showParcels && !isAddressSearch && !parcelCacheHit) {
+        onUpdateRef.current(
+          { source: current.source ?? 'land_parcels', mode: 'parcels', items: [], clusters: [], truncated: false, returned: 0 },
+          zoom,
+        );
       }
 
       if (qhsddResult && showQhsdd) {
@@ -692,7 +798,7 @@ export function MapDataLayer({
       if (err instanceof DOMException && err.name === 'AbortError') return;
       onErrorRef.current(err instanceof Error ? err.message : 'Lỗi tải dữ liệu');
     }
-  }, [map, renderParcels, renderClusters, renderVisibleParcels, renderQhsddZones, renderQhsddLabels, PROPERTY_BUY_PANE]);
+  }, [map, renderParcels, renderVisibleParcels, renderQhsddZones, renderQhsddLabels, clearParcelLayers, PROPERTY_BUY_PANE]);
 
   const runFetchRef = useRef(runFetch);
   runFetchRef.current = runFetch;
@@ -732,6 +838,9 @@ export function MapDataLayer({
       qhsddCacheRef.current = null;
       loadedParcelsRef.current.clear();
       lastFetchKeyRef.current = '';
+      lastParcelRenderKeyRef.current = '';
+      parcelRenderModeRef.current = null;
+      pruneStaleParcelCanvases(map, null);
       syncQhsddLabels(map.getZoom());
       scheduleFetchRef.current();
     },
@@ -746,6 +855,8 @@ export function MapDataLayer({
     parcelCacheRef.current = null;
     qhsddCacheRef.current = null;
     loadedParcelsRef.current.clear();
+    lastParcelRenderKeyRef.current = '';
+    parcelRenderModeRef.current = null;
     if (layerRef.current) {
       layerRef.current.clearLayers();
     }
@@ -760,13 +871,18 @@ export function MapDataLayer({
     if (propertyBuyLayerRef.current) {
       propertyBuyLayerRef.current.clearLayers();
     }
-  }, [filters.source]);
+    clearParcelSelection(map, parcelSelectionRef.current);
+    map.closePopup();
+    pruneStaleParcelCanvases(map, null);
+  }, [filters.source, map]);
 
   useEffect(() => {
     lastFetchKeyRef.current = '';
     parcelCacheRef.current = null;
     qhsddCacheRef.current = null;
     loadedParcelsRef.current.clear();
+    lastParcelRenderKeyRef.current = '';
+    parcelRenderModeRef.current = null;
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       void runFetchRef.current();

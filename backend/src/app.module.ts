@@ -12,6 +12,8 @@ import { ElasticService } from './search/elastic.service';
 import { ParcelSearchService } from './search/parcel-search.service';
 import { QhsddService } from './parcels/qhsdd.service';
 import { DatabaseService } from './shared/database.service';
+import { TilesController } from './tiles/tiles.controller';
+import { TilesService } from './tiles/tiles.service';
 
 @Module({
   imports: [
@@ -21,9 +23,10 @@ import { DatabaseService } from './shared/database.service';
       signOptions: { expiresIn: '7d' },
     }),
   ],
-  controllers: [AuthController, ParcelsController, PropertyBuysController],
+  controllers: [AuthController, ParcelsController, PropertyBuysController, TilesController],
   providers: [
     DatabaseService,
+    TilesService,
     QhsddService,
     AuthService,
     ElasticService,

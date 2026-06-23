@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, AutoComplete, Card, Input, Select, Spin, Typography } from 'antd';
-import { MapContainer, TileLayer } from 'react-leaflet';
 import { fetchParcelAddressSuggest, fetchStats, type ParcelQuery } from '../api';
-import { MapDataLayer } from '../components/MapDataLayer';
+import { MapLibreView, type MapLibreUpdate } from '../components/MapLibreView';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelListResponse, type ParcelSource, type Stats } from '../types';
-
-const HCM_CENTER: [number, number] = [10.7769, 106.7009];
+import { LAND_PARCELS_MIN_ZOOM, QHSDD_MIN_ZOOM } from '../mapTiles';
+import { QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
+import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelSource, type Stats } from '../types';
 
 function formatNumber(value: number | string | undefined) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0));
@@ -23,8 +22,8 @@ export function MapPage() {
   const debouncedSuggest = useDebouncedValue(searchInput, 250);
   const [suggestions, setSuggestions] = useState<ParcelAddressSuggestion[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
-  const [mapResult, setMapResult] = useState<ParcelListResponse | null>(null);
-  const [mapZoom, setMapZoom] = useState(17);
+  const [mapInfo, setMapInfo] = useState<MapLibreUpdate | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState('');
   const [mapFocus, setMapFocus] = useState<{
     lat: number;
@@ -109,29 +108,26 @@ export function MapPage() {
   const handleSourceChange = (value: ParcelSource) => {
     setDataSource(value);
     resetFilters();
-    setMapResult(null);
+    setMapInfo(null);
     setError('');
   };
 
   const isPropertyBuySource = dataSource === 'property_buy_records';
   const showsDistrictFilters = isParcelDataSource(dataSource);
   const showsQhsddOverlay = dataSource === 'land_parcels';
+  const mapZoom = mapInfo?.zoom ?? 17;
 
-  const statusText = mapResult
-    ? debouncedSearch
-      ? mapResult.truncated
-        ? `${mapResult.returned}+ kết quả tìm kiếm`
-        : `${mapResult.returned} kết quả tìm kiếm`
-      : mapResult.mode === 'clusters'
-        ? mapResult.truncated
-          ? `${mapResult.returned}+ ô gom · ~${formatNumber(mapResult.cluster_parcels || 0)}+ thửa (zoom ${mapZoom})`
-          : `${mapResult.returned} ô gom · ~${formatNumber(mapResult.cluster_parcels || 0)} thửa (zoom ${mapZoom})`
-        : mapResult.truncated
-          ? `${mapResult.returned}+ ${isPropertyBuySource ? 'tọa độ giao dịch' : 'thửa'} (giới hạn vùng nhìn · zoom ${mapZoom})`
-          : `${mapResult.returned} ${isPropertyBuySource ? 'tọa độ giao dịch' : 'thửa'} trong vùng nhìn (zoom ${mapZoom})`
+  const statusText = !mapReady
+    ? 'Đang tải bản đồ...'
     : debouncedSearch
-      ? 'Đang tìm kiếm...'
-      : 'Di chuyển bản đồ để tải dữ liệu';
+      ? mapInfo?.truncated
+        ? `${mapInfo?.searchReturned ?? 0}+ kết quả tìm kiếm`
+        : `${mapInfo?.searchReturned ?? 0} kết quả tìm kiếm`
+      : isPropertyBuySource
+        ? `${mapInfo?.propertyBuyCount ?? 0} tọa độ giao dịch (zoom ${mapZoom})`
+        : mapZoom < LAND_PARCELS_MIN_ZOOM
+          ? `Lớp quy hoạch (tile · zoom ${mapZoom} — zoom ≥${LAND_PARCELS_MIN_ZOOM} để xem thửa)`
+          : `Vector tiles · ~${formatNumber(mapInfo?.visibleParcels ?? 0)} thửa trên màn hình (zoom ${mapZoom})`;
 
   const suggestOptions = useMemo(
     () =>
@@ -149,8 +145,6 @@ export function MapPage() {
       })),
     [suggestions],
   );
-
-  const showInitialLoading = !mapResult && !error;
 
   return (
     <div className="map-page">
@@ -212,59 +206,44 @@ export function MapPage() {
       </Card>
 
       <div className="map-container-wrap">
-        {showInitialLoading ? (
+        {!mapReady ? (
           <div className="map-loading">
             <Spin />
           </div>
         ) : null}
-        <MapContainer
-          center={HCM_CENTER}
-          zoom={17}
-          className="map"
-          preferCanvas
-          zoomAnimation={false}
-          fadeAnimation={false}
-          markerZoomAnimation={false}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; CARTO'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            updateWhenIdle
-            updateWhenZooming={false}
-          />
-          <MapDataLayer
-            filters={activeFilters}
-            filtersVersion={filtersVersion}
-            onUpdate={(result, zoom) => {
-              setMapResult(result);
-              setMapZoom(zoom);
-            }}
-            onError={setError}
-            focusTarget={mapFocus}
-          />
-        </MapContainer>
+        <MapLibreView
+          dataSource={dataSource}
+          filters={filters}
+          filtersVersion={filtersVersion}
+          searchQuery={debouncedSearch}
+          focusTarget={mapFocus}
+          onUpdate={setMapInfo}
+          onError={setError}
+          onReady={() => setMapReady(true)}
+        />
       </div>
 
       <div className="map-metrics">
         <span>
           Đang hiển thị:{' '}
-          <strong>
-            {mapResult?.mode === 'clusters'
-              ? `${formatNumber(mapResult.returned)} ô`
-              : formatNumber(mapResult?.returned || 0)}
-          </strong>
-          {mapResult?.mode === 'clusters' && mapResult.cluster_parcels ? (
-            <> · ~<strong>{formatNumber(mapResult.cluster_parcels)}</strong> thửa</>
-          ) : null}
+          {debouncedSearch ? (
+            <strong>{formatNumber(mapInfo?.searchReturned ?? 0)}</strong>
+          ) : isPropertyBuySource ? (
+            <strong>{formatNumber(mapInfo?.propertyBuyCount ?? 0)}</strong>
+          ) : mapZoom < LAND_PARCELS_MIN_ZOOM ? (
+            <strong>lớp quy hoạch (tile)</strong>
+          ) : (
+            <strong>{formatNumber(mapInfo?.visibleParcels ?? 0)}</strong>
+          )}
         </span>
         {isPropertyBuySource ? (
-          <span>Tổng giao dịch map: <strong>{formatNumber(mapResult?.returned || 0)}</strong></span>
+          <span>Tổng giao dịch map: <strong>{formatNumber(mapInfo?.propertyBuyCount ?? 0)}</strong></span>
         ) : (
           <>
             <span>TB diện tích: <strong>{formatNumber(stats?.summary.avg_area)} m²</strong></span>
             <span>Tổng thửa: <strong>{formatNumber(stats?.summary.parcel_count || 0)}</strong></span>
             {showsQhsddOverlay ? (
-              <span>Lớp QHSDD nền: <strong>47.882</strong> vùng · nhãn zoom ≥17</span>
+              <span>Lớp QHSDD: <strong>z≥{QHSDD_MIN_ZOOM}</strong> · nhãn z≥{QHSDD_LABEL_MIN_ZOOM} · thửa z≥{LAND_PARCELS_MIN_ZOOM}</span>
             ) : null}
           </>
         )}

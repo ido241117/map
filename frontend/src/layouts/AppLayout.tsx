@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Typography, Button, theme } from 'antd';
+import { Layout, Menu, Typography, Button } from 'antd';
 import {
   LogoutOutlined,
   MenuFoldOutlined,
@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 
-const { Sider, Header, Content } = Layout;
+const { Sider, Content } = Layout;
 
 const menuItems = [
   { key: '/map', icon: <GlobalOutlined />, label: <Link to="/map">Bản đồ</Link> },
@@ -27,7 +27,6 @@ export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { token } = theme.useToken();
 
   const selectedKey = useMemo(() => {
     if (location.pathname.startsWith('/property-buys')) return '/property-buys';
@@ -62,6 +61,15 @@ export function AppLayout() {
         />
 
         <div className="app-sider-footer">
+          <Button
+            type="text"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed((value) => !value)}
+            className="app-collapse-btn"
+            aria-label={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+          >
+            {!collapsed ? 'Thu gọn' : null}
+          </Button>
           {!collapsed ? (
             <Typography.Text type="secondary" className="app-user-email">
               <UserOutlined /> {user?.displayName || user?.email}
@@ -79,16 +87,6 @@ export function AppLayout() {
       </Sider>
 
       <Layout>
-        <Header className="app-header" style={{ background: token.colorBgContainer }}>
-          <Button
-            type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed((value) => !value)}
-          />
-          <Typography.Title level={4} className="app-header-title">
-            {selectedKey === '/map' ? 'Bản đồ thửa đất' : 'Giao dịch mua BĐS'}
-          </Typography.Title>
-        </Header>
         <Content className="app-content">
           <Outlet />
         </Content>

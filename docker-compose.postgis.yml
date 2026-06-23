@@ -1,20 +1,36 @@
 services:
   postgis:
     image: postgis/postgis:17-3.5
-    container_name: osm_hcm_postgis
+    container_name: hcm_land_postgis
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: osm_hcm
+      POSTGRES_DB: hcm_land_mvp
     ports:
       - '5433:5432'
     volumes:
-      - osm_pg_data:/var/lib/postgresql/data
+      - hcm_land_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d osm_hcm']
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d hcm_land_mvp']
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 30
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: hcm_land_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - '5050:80'
+    depends_on:
+      postgis:
+        condition: service_healthy
+    volumes:
+      - hcm_land_pgadmin_data:/var/lib/pgadmin
 
 volumes:
-  osm_pg_data:
+  hcm_land_pg_data:
+  hcm_land_pgadmin_data:

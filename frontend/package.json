@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "predev": "powershell -ExecutionPolicy Bypass -File ../scripts/kill-port.ps1 -Port 5173",
+    "stop": "powershell -ExecutionPolicy Bypass -File ../scripts/kill-port.ps1 -Port 5173",
+    "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
@@ -14,6 +16,7 @@
     "antd": "^6.4.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
+    "maplibre-gl": "^5.24.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../shared/database.service';
 
-export const QHSDD_MIN_ZOOM = 11;
+export const QHSDD_MIN_ZOOM = 8;
 
 type QhsddFilters = {
   minLat?: number;
