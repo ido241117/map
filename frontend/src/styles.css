@@ -164,6 +164,14 @@ body,
   flex-shrink: 0;
 }
 
+.map-layer-toggles {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .map-filter-property-buy-overlay {
   width: 210px;
   flex-shrink: 0;

@@ -22,6 +22,11 @@ function parseCoords(zRaw: string, xRaw: string, yRaw: string) {
 }
 
 function sendMvt(res: Response, tile: Buffer) {
+  if (!tile.length) {
+    res.set('Cache-Control', 'no-store');
+    res.status(204).send();
+    return;
+  }
   res.set({
     'Content-Type': 'application/vnd.mapbox-vector-tile',
     'Cache-Control': `public, max-age=${TILE_CACHE_MAX_AGE_SEC}`,

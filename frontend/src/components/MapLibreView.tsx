@@ -11,6 +11,7 @@ import {
   LAND_PARCELS_LAYER,
   LAND_PARCELS_MIN_ZOOM,
   QHSDD_LAYER,
+  QHSDD_MAX_TILE_ZOOM,
   QHSDD_MIN_ZOOM,
   landParcelsTileUrl,
   qhsddTileUrl,
@@ -21,6 +22,7 @@ import type { Parcel, ParcelSource } from '../types';
 export type MapLibreUpdate = {
   zoom: number;
   visibleParcels: number;
+  visibleQhsdd: number;
   searchReturned?: number;
   truncated?: boolean;
   propertyBuyCount?: number;
@@ -32,6 +34,8 @@ type MapLibreViewProps = {
   filtersVersion: string;
   searchQuery?: string;
   focusTarget?: { lat: number; lng: number; zoom?: number; key: string } | null;
+  showParcels?: boolean;
+  showQhsdd?: boolean;
   onUpdate: (info: MapLibreUpdate) => void;
   onError: (message: string) => void;
   onReady: () => void;
@@ -140,9 +144,19 @@ function setLayerVisibility(map: Map, layerId: string, visible: boolean) {
 }
 
 function countRenderedParcels(map: Map) {
-  if (!map.getLayer('parcel-fill')) return 0;
+  const layers = ['parcel-fill', 'search-parcel-fill'].filter((id) => map.getLayer(id));
+  if (!layers.length) return 0;
   try {
-    return map.queryRenderedFeatures({ layers: ['parcel-fill'] }).length;
+    return map.queryRenderedFeatures({ layers }).length;
+  } catch {
+    return 0;
+  }
+}
+
+function countRenderedQhsdd(map: Map) {
+  if (!map.getLayer('qhsdd-fill')) return 0;
+  try {
+    return map.queryRenderedFeatures({ layers: ['qhsdd-fill'] }).length;
   } catch {
     return 0;
   }
@@ -152,24 +166,31 @@ function emitUpdate(map: Map, onUpdate: (info: MapLibreUpdate) => void, extra?: 
   onUpdate({
     zoom: Math.round(map.getZoom() * 10) / 10,
     visibleParcels: countRenderedParcels(map),
+    visibleQhsdd: countRenderedQhsdd(map),
     ...extra,
   });
 }
 
-function syncLayerVisibility(map: Map, dataSource: ParcelSource, searchQuery: string) {
+function syncLayerVisibility(
+  map: Map,
+  dataSource: ParcelSource,
+  searchQuery: string,
+  showParcels: boolean,
+  showQhsdd: boolean,
+) {
   const isSearch = Boolean(searchQuery.trim());
   const showLandLayers = dataSource === 'land_parcels';
   const isPropertyBuy = dataSource === 'property_buy_records';
 
-  setLayerVisibility(map, 'qhsdd-fill', showLandLayers && !isSearch);
-  setLayerVisibility(map, 'qhsdd-line', showLandLayers && !isSearch);
-  setLayerVisibility(map, 'qhsdd-label', showLandLayers && !isSearch);
-  setLayerVisibility(map, 'parcel-fill', showLandLayers && !isSearch);
-  setLayerVisibility(map, 'parcel-line', showLandLayers && !isSearch);
-  setLayerVisibility(map, 'search-parcel-fill', showLandLayers && isSearch);
-  setLayerVisibility(map, 'search-parcel-line', showLandLayers && isSearch);
-  setLayerVisibility(map, 'selected-parcel-fill', showLandLayers);
-  setLayerVisibility(map, 'selected-parcel-line', showLandLayers);
+  setLayerVisibility(map, 'qhsdd-fill', showLandLayers && showQhsdd && !isSearch);
+  setLayerVisibility(map, 'qhsdd-line', showLandLayers && showQhsdd && !isSearch);
+  setLayerVisibility(map, 'qhsdd-label', showLandLayers && showQhsdd && !isSearch);
+  setLayerVisibility(map, 'parcel-fill', showLandLayers && showParcels && !isSearch);
+  setLayerVisibility(map, 'parcel-line', showLandLayers && showParcels && !isSearch);
+  setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);
+  setLayerVisibility(map, 'search-parcel-line', showLandLayers && showParcels && isSearch);
+  setLayerVisibility(map, 'selected-parcel-fill', showLandLayers && showParcels);
+  setLayerVisibility(map, 'selected-parcel-line', showLandLayers && showParcels);
   setLayerVisibility(map, 'property-buy-circles', isPropertyBuy);
 }
 
@@ -192,7 +213,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         type: 'vector',
         tiles: [qhsddTileUrl()],
         minzoom: QHSDD_MIN_ZOOM,
-        maxzoom: 22,
+        maxzoom: QHSDD_MAX_TILE_ZOOM,
       },
       parcels: {
         type: 'vector',
@@ -348,6 +369,8 @@ export function MapLibreView({
   filtersVersion,
   searchQuery = '',
   focusTarget = null,
+  showParcels = true,
+  showQhsdd = true,
   onUpdate,
   onError,
   onReady,
@@ -361,6 +384,8 @@ export function MapLibreView({
   const dataSourceRef = useRef(dataSource);
   const filtersRef = useRef(filters);
   const searchQueryRef = useRef(searchQuery);
+  const showParcelsRef = useRef(showParcels);
+  const showQhsddRef = useRef(showQhsdd);
 
   onUpdateRef.current = onUpdate;
   onErrorRef.current = onError;
@@ -368,6 +393,8 @@ export function MapLibreView({
   dataSourceRef.current = dataSource;
   filtersRef.current = filters;
   searchQueryRef.current = searchQuery;
+  showParcelsRef.current = showParcels;
+  showQhsddRef.current = showQhsdd;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -428,7 +455,13 @@ export function MapLibreView({
 
     map.on('load', () => {
       map.resize();
-      syncLayerVisibility(map, dataSourceRef.current, searchQueryRef.current);
+      syncLayerVisibility(
+        map,
+        dataSourceRef.current,
+        searchQueryRef.current,
+        showParcelsRef.current,
+        showQhsddRef.current,
+      );
       onReadyRef.current();
       emitUpdate(map, (info) => onUpdateRef.current(info));
     });
@@ -492,7 +525,7 @@ export function MapLibreView({
 
     const showLandLayers = dataSource === 'land_parcels';
 
-    const apply = () => syncLayerVisibility(map, dataSource, searchQuery);
+    const apply = () => syncLayerVisibility(map, dataSource, searchQuery, showParcels, showQhsdd);
 
     if (map.isStyleLoaded()) {
       apply();
@@ -504,6 +537,16 @@ export function MapLibreView({
       setGeoJsonSource(map, 'search-parcels', emptyFeatureCollection());
       setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
     }
+
+    if (!showParcels) {
+      popupRef.current?.remove();
+      setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
+    }
+  }, [dataSource, searchQuery, showParcels, showQhsdd]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
 
     popupRef.current?.remove();
     setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
@@ -577,6 +620,7 @@ export function MapLibreView({
         emitUpdate(map, (info) => onUpdateRef.current(info), {
           propertyBuyCount: result.items.length,
           visibleParcels: 0,
+          visibleQhsdd: 0,
         });
       })
       .catch((error: unknown) => {

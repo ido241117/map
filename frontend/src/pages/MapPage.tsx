@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, AutoComplete, Card, Input, Select, Spin, Typography } from 'antd';
+import { Alert, AutoComplete, Card, Checkbox, Input, Select, Spin, Typography } from 'antd';
 import { fetchParcelAddressSuggest, fetchStats, type ParcelQuery } from '../api';
 import { MapLibreView, type MapLibreUpdate } from '../components/MapLibreView';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { LAND_PARCELS_MIN_ZOOM, QHSDD_MIN_ZOOM } from '../mapTiles';
-import { QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
 import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelSource, type Stats } from '../types';
 
 function formatNumber(value: number | string | undefined) {
@@ -31,6 +29,8 @@ export function MapPage() {
     zoom?: number;
     key: string;
   } | null>(null);
+  const [showParcels, setShowParcels] = useState(true);
+  const [showQhsdd, setShowQhsdd] = useState(true);
 
   const activeFilters = useMemo(
     () => ({ ...filters, source: dataSource, q: debouncedSearch || undefined }),
@@ -117,18 +117,6 @@ export function MapPage() {
   const showsQhsddOverlay = dataSource === 'land_parcels';
   const mapZoom = mapInfo?.zoom ?? 17;
 
-  const statusText = !mapReady
-    ? 'Đang tải bản đồ...'
-    : debouncedSearch
-      ? mapInfo?.truncated
-        ? `${mapInfo?.searchReturned ?? 0}+ kết quả tìm kiếm`
-        : `${mapInfo?.searchReturned ?? 0} kết quả tìm kiếm`
-      : isPropertyBuySource
-        ? `${mapInfo?.propertyBuyCount ?? 0} tọa độ giao dịch (zoom ${mapZoom})`
-        : mapZoom < LAND_PARCELS_MIN_ZOOM
-          ? `Lớp quy hoạch (tile · zoom ${mapZoom} — zoom ≥${LAND_PARCELS_MIN_ZOOM} để xem thửa)`
-          : `Vector tiles · ~${formatNumber(mapInfo?.visibleParcels ?? 0)} thửa trên màn hình (zoom ${mapZoom})`;
-
   const suggestOptions = useMemo(
     () =>
       suggestions.map((item) => ({
@@ -198,9 +186,16 @@ export function MapPage() {
               />
             </>
           ) : null}
-          <Typography.Text type="secondary" className="map-status-text" ellipsis>
-            {statusText}
-          </Typography.Text>
+          {showsQhsddOverlay ? (
+            <div className="map-layer-toggles">
+              <Checkbox checked={showParcels} onChange={(event) => setShowParcels(event.target.checked)}>
+                Thửa đất
+              </Checkbox>
+              <Checkbox checked={showQhsdd} onChange={(event) => setShowQhsdd(event.target.checked)}>
+                QHSDD
+              </Checkbox>
+            </div>
+          ) : null}
         </div>
         {error ? <Alert type="error" message={error} showIcon style={{ marginTop: 12 }} /> : null}
       </Card>
@@ -217,6 +212,8 @@ export function MapPage() {
           filtersVersion={filtersVersion}
           searchQuery={debouncedSearch}
           focusTarget={mapFocus}
+          showParcels={showParcels}
+          showQhsdd={showQhsdd}
           onUpdate={setMapInfo}
           onError={setError}
           onReady={() => setMapReady(true)}
@@ -224,29 +221,18 @@ export function MapPage() {
       </div>
 
       <div className="map-metrics">
-        <span>
-          Đang hiển thị:{' '}
-          {debouncedSearch ? (
-            <strong>{formatNumber(mapInfo?.searchReturned ?? 0)}</strong>
-          ) : isPropertyBuySource ? (
-            <strong>{formatNumber(mapInfo?.propertyBuyCount ?? 0)}</strong>
-          ) : mapZoom < LAND_PARCELS_MIN_ZOOM ? (
-            <strong>lớp quy hoạch (tile)</strong>
-          ) : (
-            <strong>{formatNumber(mapInfo?.visibleParcels ?? 0)}</strong>
-          )}
-        </span>
-        {isPropertyBuySource ? (
-          <span>Tổng giao dịch map: <strong>{formatNumber(mapInfo?.propertyBuyCount ?? 0)}</strong></span>
-        ) : (
+        {showsQhsddOverlay ? (
           <>
-            <span>TB diện tích: <strong>{formatNumber(stats?.summary.avg_area)} m²</strong></span>
-            <span>Tổng thửa: <strong>{formatNumber(stats?.summary.parcel_count || 0)}</strong></span>
-            {showsQhsddOverlay ? (
-              <span>Lớp QHSDD: <strong>z≥{QHSDD_MIN_ZOOM}</strong> · nhãn z≥{QHSDD_LABEL_MIN_ZOOM} · thửa z≥{LAND_PARCELS_MIN_ZOOM}</span>
-            ) : null}
+            <span>Thửa: <strong>{formatNumber(mapInfo?.visibleParcels ?? 0)}</strong></span>
+            <span>QHSDD: <strong>{formatNumber(mapInfo?.visibleQhsdd ?? 0)}</strong></span>
+            <span>Zoom: <strong>{mapZoom}</strong></span>
           </>
-        )}
+        ) : isPropertyBuySource ? (
+          <>
+            <span>Điểm: <strong>{formatNumber(mapInfo?.propertyBuyCount ?? 0)}</strong></span>
+            <span>Zoom: <strong>{mapZoom}</strong></span>
+          </>
+        ) : null}
       </div>
     </div>
   );

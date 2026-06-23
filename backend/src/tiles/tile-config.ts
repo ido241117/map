@@ -4,11 +4,13 @@ export const QHSDD_LAYER = 'qhsdd';
 
 export const MVT_EXTENT = 4096;
 /** Wider buffer reduces hairline gaps at tile seams after ST_AsMVTGeom clipping. */
-export const MVT_BUFFER = 128;
+export const MVT_BUFFER = 256;
 
-export const LAND_PARCELS_MIN_ZOOM = 15;
+export const LAND_PARCELS_MIN_ZOOM = 8;
 /** Overview quy hoạch — zoom xa vẫn thấy màu vùng (text riêng ở z≥17). */
 export const QHSDD_MIN_ZOOM = 8;
+/** Phải khớp zoom crawl (`crawl_hcm_qhsdd.py --zoom`). MapLibre overzoom trên mức này. */
+export const QHSDD_MAX_TILE_ZOOM = 12;
 
 export const HCM_PROVINCE_CODE = '79';
 
@@ -29,16 +31,13 @@ export function minZoomFor(kind: TileKind): number {
  */
 export function simplifyToleranceDeg(z: number, kind: TileKind): number | null {
   if (kind === 'land-parcels') {
-    if (z <= 14) return null;
+    if (z < LAND_PARCELS_MIN_ZOOM) return null;
     // Adjacent parcels share edges — per-feature ST_Simplify opens visible gaps.
     return 0;
   }
 
   if (z < QHSDD_MIN_ZOOM) return null;
-  if (z <= 9) return 0.001;
-  if (z <= 11) return 0.0005;
-  if (z <= 13) return 0.0002;
-  if (z <= 15) return 0.00005;
+  // Geometry is z12 tile fragments in DB — no per-zoom simplify (changes shapes by zoom).
   return 0;
 }
 

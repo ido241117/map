@@ -37,6 +37,10 @@ venv/
 
 # Local data (imports, dumps, excel — not for repo)
 data/
+db-export/
+*.zip
+*.dump
+*.pbf
 
 # Crawler / scraper tooling (local only)
 scan/
