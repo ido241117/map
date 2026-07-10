@@ -8,8 +8,30 @@ services:
       POSTGRES_DB: hcm_land_mvp
     ports:
       - '5433:5432'
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - checkpoint_completion_target=0.9
     volumes:
       - hcm_land_pg_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 4G
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres -d hcm_land_mvp']
       interval: 5s

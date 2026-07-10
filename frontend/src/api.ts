@@ -173,6 +173,8 @@ export type QhsddZoneQuery = {
   minLng?: string;
   maxLng?: string;
   landType?: string;
+  district?: string;
+  ward?: string;
   zoom?: string;
   limit?: string;
 };

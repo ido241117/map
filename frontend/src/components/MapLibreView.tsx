@@ -10,14 +10,14 @@ import {
 import {
   HCM_CENTER,
   LAND_PARCELS_LAYER,
-  LAND_PARCELS_MIN_ZOOM,
+  LAND_PARCELS_MAX_TILE_ZOOM,
   QHSDD_LAYER,
   QHSDD_MAX_TILE_ZOOM,
   QHSDD_MIN_ZOOM,
   landParcelsTileUrl,
   qhsddTileUrl,
 } from '../mapTiles';
-import { QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
+import { GEOMETRY_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
 import type { Parcel, ParcelSource } from '../types';
 
 export type MapLibreUpdate = {
@@ -49,8 +49,9 @@ function formatNumber(value: number | string | undefined) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0));
 }
 
-function escapeHtml(value: string) {
-  return value
+function escapeHtml(value: string | null | undefined) {
+  const text = value ?? '';
+  return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -183,9 +184,9 @@ function syncLayerVisibility(
   const showLandLayers = dataSource === 'land_parcels';
   const isPropertyBuy = dataSource === 'property_buy_records';
 
-  setLayerVisibility(map, 'qhsdd-fill', showLandLayers && showQhsdd && !isSearch);
-  setLayerVisibility(map, 'qhsdd-line', showLandLayers && showQhsdd && !isSearch);
-  setLayerVisibility(map, 'qhsdd-label', showLandLayers && showQhsdd && !isSearch);
+  setLayerVisibility(map, 'qhsdd-fill', showLandLayers && showQhsdd);
+  setLayerVisibility(map, 'qhsdd-line', showLandLayers && showQhsdd);
+  setLayerVisibility(map, 'qhsdd-label', showLandLayers && showQhsdd);
   setLayerVisibility(map, 'parcel-fill', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'parcel-line', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);
@@ -195,25 +196,50 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'property-buy-circles', isPropertyBuy);
 }
 
+const QHSDD_LABEL_BASE_FILTER = [
+  'all',
+  ['has', 'loai_dat_quy_hoach'],
+  ['!=', ['get', 'loai_dat_quy_hoach'], ''],
+] as maplibregl.FilterSpecification;
+
 function hasAdminFilter(filters: { district?: string; ward?: string }) {
   return Boolean(filters.district?.trim() || filters.ward?.trim());
 }
 
-function syncParcelTileSource(
-  map: Map,
+function adminTileFilter(
   filters: { district?: string; ward?: string },
-) {
-  const source = map.getSource('parcels') as maplibregl.VectorTileSource | undefined;
-  if (!source || typeof source.setTiles !== 'function') return;
-  source.setTiles([
-    landParcelsTileUrl({
-      district: filters.district,
-      ward: filters.ward,
-    }),
-  ]);
+): { district?: string; ward?: string } | undefined {
+  return hasAdminFilter(filters) ? filters : undefined;
 }
 
-function buildMapStyle(adminFilters?: { district?: string; ward?: string }): maplibregl.StyleSpecification {
+function syncTileSources(
+  map: Map,
+  showParcels: boolean,
+  showQhsdd: boolean,
+  filters: { district?: string; ward?: string },
+  tileUrlCache?: { parcels: string | null; qhsdd: string | null },
+) {
+  const admin = adminTileFilter(filters);
+  const parcels = map.getSource('parcels') as maplibregl.VectorTileSource | undefined;
+  if (showParcels && parcels && typeof parcels.setTiles === 'function') {
+    const url = landParcelsTileUrl(admin);
+    if (tileUrlCache?.parcels !== url) {
+      parcels.setTiles([url]);
+      if (tileUrlCache) tileUrlCache.parcels = url;
+    }
+  }
+
+  const qhsdd = map.getSource('qhsdd') as maplibregl.VectorTileSource | undefined;
+  if (showQhsdd && qhsdd && typeof qhsdd.setTiles === 'function') {
+    const url = qhsddTileUrl(admin);
+    if (tileUrlCache?.qhsdd !== url) {
+      qhsdd.setTiles([url]);
+      if (tileUrlCache) tileUrlCache.qhsdd = url;
+    }
+  }
+}
+
+function buildMapStyle(): maplibregl.StyleSpecification {
   return {
     version: 8,
     glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
@@ -236,9 +262,9 @@ function buildMapStyle(adminFilters?: { district?: string; ward?: string }): map
       },
       parcels: {
         type: 'vector',
-        tiles: [landParcelsTileUrl(adminFilters)],
-        minzoom: LAND_PARCELS_MIN_ZOOM,
-        maxzoom: 22,
+        tiles: [landParcelsTileUrl()],
+        minzoom: GEOMETRY_MIN_ZOOM,
+        maxzoom: LAND_PARCELS_MAX_TILE_ZOOM,
       },
       'search-parcels': {
         type: 'geojson',
@@ -288,11 +314,7 @@ function buildMapStyle(adminFilters?: { district?: string; ward?: string }): map
         source: 'qhsdd',
         'source-layer': QHSDD_LAYER,
         minzoom: QHSDD_LABEL_MIN_ZOOM,
-        filter: [
-          'all',
-          ['has', 'loai_dat_quy_hoach'],
-          ['!=', ['get', 'loai_dat_quy_hoach'], ''],
-        ],
+        filter: QHSDD_LABEL_BASE_FILTER,
         layout: {
           'text-field': ['get', 'loai_dat_quy_hoach'],
           'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
@@ -312,7 +334,7 @@ function buildMapStyle(adminFilters?: { district?: string; ward?: string }): map
         type: 'fill',
         source: 'parcels',
         'source-layer': LAND_PARCELS_LAYER,
-        minzoom: LAND_PARCELS_MIN_ZOOM,
+        minzoom: GEOMETRY_MIN_ZOOM,
         paint: {
           'fill-color': '#22c55e',
           'fill-opacity': 0.28,
@@ -323,7 +345,7 @@ function buildMapStyle(adminFilters?: { district?: string; ward?: string }): map
         type: 'line',
         source: 'parcels',
         'source-layer': LAND_PARCELS_LAYER,
-        minzoom: LAND_PARCELS_MIN_ZOOM,
+        minzoom: GEOMETRY_MIN_ZOOM,
         paint: {
           'line-color': '#14532d',
           'line-opacity': 0.82,
@@ -405,7 +427,7 @@ export function MapLibreView({
   const searchQueryRef = useRef(searchQuery);
   const showParcelsRef = useRef(showParcels);
   const showQhsddRef = useRef(showQhsdd);
-  const hadAdminFilterRef = useRef(false);
+  const tileUrlCacheRef = useRef({ parcels: null as string | null, qhsdd: null as string | null });
 
   onUpdateRef.current = onUpdate;
   onErrorRef.current = onError;
@@ -421,7 +443,7 @@ export function MapLibreView({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: buildMapStyle(filtersRef.current),
+      style: buildMapStyle(),
       center: HCM_CENTER,
       zoom: 17,
       attributionControl: { compact: true },
@@ -475,6 +497,13 @@ export function MapLibreView({
 
     map.on('load', () => {
       map.resize();
+      syncTileSources(
+        map,
+        showParcelsRef.current,
+        showQhsddRef.current,
+        filtersRef.current,
+        tileUrlCacheRef.current,
+      );
       syncLayerVisibility(
         map,
         dataSourceRef.current,
@@ -492,9 +521,10 @@ export function MapLibreView({
 
     map.on('error', (event) => {
       const message = event.error?.message;
-      if (message) {
-        onErrorRef.current(message);
-      }
+      if (!message) return;
+      // MapLibre throws this when vector source tiles are cleared with setTiles([]).
+      if (/reading 'replace'/i.test(message)) return;
+      onErrorRef.current(message);
     });
 
     map.on('moveend', () => {
@@ -553,7 +583,12 @@ export function MapLibreView({
 
     const showLandLayers = dataSource === 'land_parcels';
 
-    const apply = () => syncLayerVisibility(map, dataSource, searchQuery, showParcels, showQhsdd);
+    const apply = () => {
+      onErrorRef.current('');
+      syncLayerVisibility(map, dataSource, searchQuery, showParcels, showQhsdd);
+      syncTileSources(map, showParcels, showQhsdd, filters, tileUrlCacheRef.current);
+      emitUpdate(map, (info) => onUpdateRef.current(info));
+    };
 
     if (map.isStyleLoaded()) {
       apply();
@@ -570,41 +605,19 @@ export function MapLibreView({
       popupRef.current?.remove();
       setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
     }
-  }, [dataSource, searchQuery, showParcels, showQhsdd]);
+  }, [dataSource, searchQuery, showParcels, showQhsdd, filters.district, filters.ward]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || dataSource !== 'land_parcels') return;
+    if (!map || dataSource !== 'land_parcels' || !hasAdminFilter(filters)) return;
 
-    const apply = () => syncParcelTileSource(map, filters);
-
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once('load', apply);
-    }
-  }, [dataSource, filters.district, filters.ward]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || dataSource !== 'land_parcels') return;
-
-    if (!hasAdminFilter(filters)) {
-      if (hadAdminFilterRef.current) {
-        map.flyTo({ center: HCM_CENTER, zoom: 12, duration: 500 });
-      }
-      hadAdminFilterRef.current = false;
-      return;
-    }
-
-    hadAdminFilterRef.current = true;
     const controller = new AbortController();
     fetchAdminBounds(
       { district: filters.district, ward: filters.ward },
       controller.signal,
     )
       .then((result) => {
-        if (controller.signal.aborted || !result.bounds) return;
+        if (controller.signal.aborted || !result.bounds || result.count === 0) return;
         const { minLat, maxLat, minLng, maxLng } = result.bounds;
         map.fitBounds(
           [
@@ -616,7 +629,6 @@ export function MapLibreView({
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
-        onErrorRef.current(error instanceof Error ? error.message : 'Không tải được vùng bản đồ');
       });
 
     return () => controller.abort();

@@ -93,6 +93,8 @@ export class ParcelsController {
     @Query('minLng') minLng?: string,
     @Query('maxLng') maxLng?: string,
     @Query('landType') landType?: string,
+    @Query('district') district?: string,
+    @Query('ward') ward?: string,
     @Query('zoom') zoom?: string,
     @Query('limit') limit?: string,
   ) {
@@ -102,6 +104,8 @@ export class ParcelsController {
       minLng: minLng ? Number(minLng) : undefined,
       maxLng: maxLng ? Number(maxLng) : undefined,
       landType,
+      district,
+      ward,
       zoom: zoom ? Number(zoom) : undefined,
       limit: limit ? Number(limit) : undefined,
     });

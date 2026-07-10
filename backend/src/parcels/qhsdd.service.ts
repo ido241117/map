@@ -9,6 +9,8 @@ type QhsddFilters = {
   minLng?: number;
   maxLng?: number;
   landType?: string;
+  district?: string;
+  ward?: string;
   zoom?: number;
   limit?: number;
 };
@@ -49,6 +51,12 @@ export class QhsddService {
     if (filters.landType) {
       where.push(`loai_dat_quy_hoach = ${addParam(filters.landType)}`);
     }
+    if (filters.district?.trim()) {
+      where.push(`district = ${addParam(filters.district.trim())}`);
+    }
+    if (filters.ward?.trim()) {
+      where.push(`ward = ${addParam(filters.ward.trim())}`);
+    }
 
     const limit = Math.min(Math.max(filters.limit || 8000, 1), 12000);
     params.push(limit + 1);
@@ -68,6 +76,8 @@ export class QhsddService {
         green,
         blue,
         fill_hex,
+        district,
+        ward,
         geometry_json
       FROM hcm_qhsdd
       ${whereSql}
@@ -84,7 +94,7 @@ export class QhsddService {
   }
 
   async stats() {
-    const [summary, landTypes] = await Promise.all([
+    const [summary, landTypes, districts, wards] = await Promise.all([
       this.db.query(`
         SELECT COUNT(*)::int AS zone_count
         FROM hcm_qhsdd
@@ -97,11 +107,28 @@ export class QhsddService {
         ORDER BY count DESC, loai_dat_quy_hoach
         LIMIT 200
       `),
+      this.db.query(`
+        SELECT district, COUNT(*)::int AS count
+        FROM hcm_qhsdd
+        WHERE district IS NOT NULL AND BTRIM(district) <> ''
+        GROUP BY district
+        ORDER BY count DESC, district
+      `),
+      this.db.query(`
+        SELECT district, ward, COUNT(*)::int AS count
+        FROM hcm_qhsdd
+        WHERE district IS NOT NULL AND ward IS NOT NULL
+          AND BTRIM(district) <> '' AND BTRIM(ward) <> ''
+        GROUP BY district, ward
+        ORDER BY district, count DESC, ward
+      `),
     ]);
 
     return {
       summary: summary.rows[0] as { zone_count: number },
       landTypes: landTypes.rows as Array<{ loai_dat_quy_hoach: string; count: number }>,
+      districts: districts.rows as Array<{ district: string; count: number }>,
+      wards: wards.rows as Array<{ district: string; ward: string; count: number }>,
     };
   }
 }

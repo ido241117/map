@@ -8,6 +8,8 @@ export type QhsddZone = {
   green: number;
   blue: number;
   fill_hex: string;
+  district?: string | null;
+  ward?: string | null;
   geometry_json: GeoJSON.Geometry;
 };
 

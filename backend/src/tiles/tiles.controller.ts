@@ -64,9 +64,14 @@ export class TilesController {
     @Param('x') x: string,
     @Param('y') y: string,
     @Res() res: Response,
+    @Query('district') district?: string,
+    @Query('ward') ward?: string,
   ) {
     const coords = parseCoords(z, x, y);
-    const tile = await this.tilesService.getMvtTile('qhsdd', coords.z, coords.x, coords.y);
+    const tile = await this.tilesService.getMvtTile('qhsdd', coords.z, coords.x, coords.y, {
+      district,
+      ward,
+    });
     sendMvt(res, tile);
   }
 }

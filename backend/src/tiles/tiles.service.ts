@@ -7,6 +7,7 @@ import {
   simplifyToleranceDeg,
   type TileKind,
 } from './tile-config';
+import { readCachedTile, tileCacheEnabled, writeCachedTile } from './tile-cache';
 
 @Injectable()
 export class TilesService {
@@ -30,12 +31,25 @@ export class TilesService {
       return Buffer.alloc(0);
     }
 
+    const hasAdminFilter = Boolean(admin?.district?.trim() || admin?.ward?.trim());
+    if (tileCacheEnabled() && !hasAdminFilter) {
+      const cached = await readCachedTile(kind, z, x, y);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const { sql, params } = buildMvtQuery(kind, z, x, y, tolerance, admin);
     const { rows } = await this.db.query<{ tile: Buffer | null }>(sql, params);
     const tile = rows[0]?.tile;
     if (!tile || tile.length === 0) {
       return Buffer.alloc(0);
     }
+
+    if (tileCacheEnabled() && !hasAdminFilter) {
+      await writeCachedTile(kind, z, x, y, tile);
+    }
+
     return tile;
   }
 }

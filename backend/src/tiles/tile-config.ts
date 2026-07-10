@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 /** MVT layer names — must match MapLibre `source-layer` in Phase 3. */
 export const LAND_PARCELS_LAYER = 'parcels';
 export const QHSDD_LAYER = 'qhsdd';
@@ -11,13 +13,24 @@ export const LAND_PARCELS_MIN_ZOOM = 8;
 export const QHSDD_MIN_ZOOM = 8;
 /** Phải khớp zoom crawl (`crawl_hcm_qhsdd.py --zoom`). MapLibre overzoom trên mức này. */
 export const QHSDD_MAX_TILE_ZOOM = 12;
+/** Pre-gen + serve tới z16; MapLibre overzoom z17+ (db.md §9). */
+export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
 
 export const HCM_PROVINCE_CODE = '79';
 
-/** Tạm tắt — bật lại TILE_FEATURE_LIMIT khi optimize production. */
-// export const TILE_FEATURE_LIMIT = 5000;
+/** Giới hạn polygon/tile cho tile dày (P95 z15 ≈ 6k). */
+export const TILE_FEATURE_LIMIT = 8_000;
 
 export const TILE_CACHE_MAX_AGE_SEC = 86_400;
+
+/** Thư mục pre-gen/cache MVT — mặc định `data/tile-cache` (repo root). */
+export function tileCacheRoot(): string {
+  const fromEnv = process.env.TILE_CACHE_DIR?.trim();
+  if (fromEnv) {
+    return path.isAbsolute(fromEnv) ? fromEnv : path.resolve(process.cwd(), fromEnv);
+  }
+  return path.resolve(process.cwd(), '..', 'data', 'tile-cache');
+}
 
 export type TileKind = 'land-parcels' | 'qhsdd';
 

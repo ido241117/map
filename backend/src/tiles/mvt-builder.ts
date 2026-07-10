@@ -4,6 +4,7 @@ import {
   MVT_BUFFER,
   MVT_EXTENT,
   QHSDD_LAYER,
+  TILE_FEATURE_LIMIT,
   type TileKind,
 } from './tile-config';
 
@@ -57,6 +58,8 @@ export function buildLandParcelsMvtQuery(
   }
 
   const whereSql = conditions.join('\n          AND ');
+  const featureLimit =
+    admin?.district?.trim() || admin?.ward?.trim() ? '' : `LIMIT ${TILE_FEATURE_LIMIT}`;
 
   return {
     layerName: LAND_PARCELS_LAYER,
@@ -67,9 +70,12 @@ export function buildLandParcelsMvtQuery(
         SELECT
           id,
           property_code,
+          district,
+          ward,
           ${buildGeomSql(toleranceParam)} AS geom
         FROM land_parcels
         WHERE ${whereSql}
+        ${featureLimit}
       ) AS mvt_row
     `,
   };
@@ -80,10 +86,24 @@ export function buildQhsddMvtQuery(
   x: number,
   y: number,
   tolerance: number,
+  admin?: AdminTileFilter,
 ): MvtQuery {
   const useSimplify = tolerance > 0;
   const toleranceParam = useSimplify ? '$4' : null;
-  const params = useSimplify ? [z, x, y, tolerance] : [z, x, y];
+  const params: unknown[] = useSimplify ? [z, x, y, tolerance] : [z, x, y];
+
+  const conditions = ['geom IS NOT NULL', TILE_INTERSECTS];
+
+  if (admin?.district?.trim()) {
+    params.push(admin.district.trim());
+    conditions.push(`district = $${params.length}`);
+  }
+  if (admin?.ward?.trim()) {
+    params.push(admin.ward.trim());
+    conditions.push(`ward = $${params.length}`);
+  }
+
+  const whereSql = conditions.join('\n          AND ');
 
   return {
     layerName: QHSDD_LAYER,
@@ -95,10 +115,11 @@ export function buildQhsddMvtQuery(
           id,
           loai_dat_quy_hoach,
           fill_hex,
+          district,
+          ward,
           ${buildGeomSql(toleranceParam)} AS geom
         FROM hcm_qhsdd
-        WHERE geom IS NOT NULL
-          AND ${TILE_INTERSECTS}
+        WHERE ${whereSql}
       ) AS mvt_row
     `,
   };
@@ -115,5 +136,5 @@ export function buildMvtQuery(
   if (kind === 'land-parcels') {
     return buildLandParcelsMvtQuery(z, x, y, tolerance, admin);
   }
-  return buildQhsddMvtQuery(z, x, y, tolerance);
+  return buildQhsddMvtQuery(z, x, y, tolerance, admin);
 }
