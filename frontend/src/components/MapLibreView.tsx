@@ -246,10 +246,10 @@ const HOUSE_NO_LABEL_LAYOUT: maplibregl.SymbolLayerSpecification['layout'] = {
   'text-font': ['Noto Sans Medium'],
   'text-size': 11,
   'text-anchor': 'center',
-  'text-allow-overlap': false,
-  'text-ignore-placement': false,
-  'text-optional': true,
-  'text-padding': 2,
+  // Collision ẩn bớt số khi viewport dày (trông như “hết quota load”) — luôn hiện đủ.
+  'text-allow-overlap': true,
+  'text-ignore-placement': true,
+  'text-padding': 0,
 };
 
 const HOUSE_NO_LABEL_PAINT: maplibregl.SymbolLayerSpecification['paint'] = {
@@ -415,16 +415,6 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         },
       },
       {
-        id: 'parcel-house-label',
-        type: 'symbol',
-        source: 'parcels',
-        'source-layer': LAND_PARCELS_LAYER,
-        minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
-        filter: HOUSE_NO_LABEL_FILTER,
-        layout: HOUSE_NO_LABEL_LAYOUT,
-        paint: HOUSE_NO_LABEL_PAINT,
-      },
-      {
         id: 'search-parcel-fill',
         type: 'fill',
         source: 'search-parcels',
@@ -443,15 +433,6 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         },
       },
       {
-        id: 'search-parcel-house-label',
-        type: 'symbol',
-        source: 'search-parcels',
-        minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
-        filter: HOUSE_NO_LABEL_FILTER,
-        layout: HOUSE_NO_LABEL_LAYOUT,
-        paint: HOUSE_NO_LABEL_PAINT,
-      },
-      {
         id: 'selected-parcel-fill',
         type: 'fill',
         source: 'selected-parcel',
@@ -468,6 +449,26 @@ function buildMapStyle(): maplibregl.StyleSpecification {
           'line-color': '#e11d48',
           'line-width': 2,
         },
+      },
+      // House numbers above fills/selection so click highlight does not cover them.
+      {
+        id: 'parcel-house-label',
+        type: 'symbol',
+        source: 'parcels',
+        'source-layer': LAND_PARCELS_LAYER,
+        minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
+        filter: HOUSE_NO_LABEL_FILTER,
+        layout: HOUSE_NO_LABEL_LAYOUT,
+        paint: HOUSE_NO_LABEL_PAINT,
+      },
+      {
+        id: 'search-parcel-house-label',
+        type: 'symbol',
+        source: 'search-parcels',
+        minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
+        filter: HOUSE_NO_LABEL_FILTER,
+        layout: HOUSE_NO_LABEL_LAYOUT,
+        paint: HOUSE_NO_LABEL_PAINT,
       },
       {
         id: 'selected-parcel-edge-label',
