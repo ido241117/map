@@ -48,7 +48,10 @@
     "dev": "npm run dev --workspace backend",
     "dev:backend": "npm run dev --workspace backend",
     "dev:frontend": "npm run dev --workspace frontend",
-    "build": "npm run build --workspace backend && npm run build --workspace frontend"
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "load:tiles": "node scripts/load/tiles-ramp.js",
+    "load:mixed": "node scripts/load/mixed-ramp.js",
+    "load:map-pan": "node scripts/load/map-pan-ramp.js"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.17.0",
@@ -56,6 +59,7 @@
     "pg": "^8.13.1"
   },
   "devDependencies": {
+    "autocannon": "^8.0.0",
     "concurrently": "^9.1.2"
   }
 }

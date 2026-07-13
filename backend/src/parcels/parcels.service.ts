@@ -8,6 +8,10 @@ import {
   type ParcelSource,
 } from './parcel-sources';
 import {
+  HCM_LAT_MAX,
+  HCM_LAT_MIN,
+  HCM_LNG_MAX,
+  HCM_LNG_MIN,
   shouldIncludeGeometry,
   VIEWPORT_GEOMETRY_LIMIT,
   VIEWPORT_MARKER_LIMIT,
@@ -196,7 +200,9 @@ export class ParcelsService {
       conditions.push(`${config.wardColumn} = $${params.length}`);
     }
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    conditions.push(`latitude BETWEEN ${HCM_LAT_MIN} AND ${HCM_LAT_MAX}`);
+    conditions.push(`longitude BETWEEN ${HCM_LNG_MIN} AND ${HCM_LNG_MAX}`);
+    const where = `WHERE ${conditions.join(' AND ')}`;
     const { rows } = await this.db.query<{
       min_lat: number;
       max_lat: number;
