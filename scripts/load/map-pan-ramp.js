@@ -32,13 +32,18 @@ function formatMb(bytes) {
 }
 
 async function fetchTile(path) {
-  const res = await fetch(`${API_URL}${path}`);
-  const buf = res.ok ? await res.arrayBuffer() : null;
-  return {
-    ok: res.ok,
-    status: res.status,
-    bytes: buf ? buf.byteLength : 0,
-  };
+  try {
+    const res = await fetch(`${API_URL}${path}`);
+    const buf = res.ok ? await res.arrayBuffer() : null;
+    return {
+      ok: res.ok,
+      status: res.status,
+      bytes: buf ? buf.byteLength : 0,
+    };
+  } catch {
+    // Connection reset / tunnel drop — count as tile failure, don't abort stage
+    return { ok: false, status: 0, bytes: 0 };
+  }
 }
 
 async function panBurst(viewportTiles, withQhsdd) {
