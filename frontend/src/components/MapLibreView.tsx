@@ -250,7 +250,8 @@ function syncTileSources(
 function buildMapStyle(): maplibregl.StyleSpecification {
   return {
     version: 8,
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    // demotiles Bold fontstack 404s → broken Vietnamese labels
+    glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
     sources: {
       basemap: {
         type: 'raster',
@@ -325,8 +326,9 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         filter: QHSDD_LABEL_BASE_FILTER,
         layout: {
           'text-field': ['get', 'loai_dat_quy_hoach'],
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-font': ['Noto Sans Medium'],
           'text-size': 11,
+          'text-max-width': 14,
           'text-anchor': 'center',
           'text-allow-overlap': true,
           'text-ignore-placement': true,
