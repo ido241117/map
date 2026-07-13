@@ -25,6 +25,7 @@ import {
   type TileLoaderStatus,
 } from '../mapTileLoader';
 import { GEOMETRY_MIN_ZOOM, HOUSE_NO_LABEL_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
+import { isUsableStreetSearchQuery } from '../searchQuery';
 import { parcelEdgeLabelsToGeoJson } from '../parcelEdgeLabels';
 import { extractHouseNo } from '../parcelHouseNo';
 import type { Parcel, ParcelSource } from '../types';
@@ -782,7 +783,7 @@ export function MapLibreView({
     if (!map || dataSource !== 'land_parcels') return;
 
     const query = searchQuery.trim();
-    if (!query) {
+    if (!query || !isUsableStreetSearchQuery(query)) {
       setGeoJsonSource(map, 'search-parcels', emptyFeatureCollection());
       emitUpdate(map, (info) => onUpdateRef.current(info), { searchReturned: 0, truncated: false });
       return;

@@ -5,6 +5,7 @@ import { MapLibreView, type MapLibreUpdate } from '../components/MapLibreView';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import type { TileLoaderStatus } from '../mapTileLoader';
 import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelSource, type Stats } from '../types';
+import { isUsableStreetSearchQuery } from '../searchQuery';
 
 function formatNumber(value: number | string | undefined) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0));
@@ -97,9 +98,22 @@ export function MapPage() {
 
   const commitSearch = (raw: string) => {
     const query = raw.trim();
+    if (!query) {
+      setSearchInput('');
+      setCommittedSearch('');
+      setMapFocus(null);
+      return;
+    }
+    // Chặn space / % / ký tự đặc biệt — không bypass zoom để dump thửa.
+    if (!isUsableStreetSearchQuery(query)) {
+      setSearchInput(query);
+      setCommittedSearch('');
+      setError('Nhập ít nhất 2 chữ hoặc số để tìm theo tên đường.');
+      return;
+    }
+    setError('');
     setSearchInput(query);
     setCommittedSearch(query);
-    if (!query) setMapFocus(null);
   };
 
   const handleSearchInputChange = (value: string) => {

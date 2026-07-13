@@ -4,6 +4,9 @@ const lib = require('../../../lib/address-normalize.js');
 
 export const buildParcelSearchDoc = lib.buildParcelSearchDoc;
 export const extractStreetName = lib.extractStreetName;
+export const escapeIlikePattern = lib.escapeIlikePattern;
+export const isUsableSearchQuery = lib.isUsableSearchQuery;
+export const MIN_SEARCH_ALNUM = lib.MIN_SEARCH_ALNUM;
 export const normalizeAdminPrefix = lib.normalizeAdminPrefix;
 export const normalizeSearchQuery = lib.normalizeSearchQuery;
 export const removeDiacritics = lib.removeDiacritics;

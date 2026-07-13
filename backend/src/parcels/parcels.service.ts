@@ -16,6 +16,7 @@ import {
   VIEWPORT_GEOMETRY_LIMIT,
   VIEWPORT_MARKER_LIMIT,
 } from './map-viewport';
+import { escapeIlikePattern, isUsableSearchQuery } from '../shared/address-normalize';
 
 type ParcelFilters = {
   source?: string;
@@ -64,7 +65,12 @@ export class ParcelsService {
     const config = SOURCE_SQL[source];
     const where: string[] = [];
     const params: unknown[] = [];
-    const isSearch = Boolean(filters.q?.trim());
+    const rawQuery = filters.q?.trim() ?? '';
+    // Query junk (space / % / _) không được coi là search — tránh bypass zoom + dump geometry.
+    if (rawQuery && !isUsableSearchQuery(rawQuery)) {
+      return { source, mode: 'parcels' as const, items: [], clusters: [], truncated: false, returned: 0 };
+    }
+    const isSearch = Boolean(rawQuery);
 
     const addParam = (value: unknown) => {
       params.push(value);
@@ -74,7 +80,7 @@ export class ParcelsService {
     if (isSearch) {
       const esIds = await this.parcelSearch.searchIds({
         source,
-        q: filters.q!.trim(),
+        q: rawQuery,
         district: filters.district,
         ward: filters.ward,
         limit: SEARCH_MAX_LIMIT,
@@ -87,9 +93,9 @@ export class ParcelsService {
         return this.listByIds(source, esIds, filters);
       }
 
-      const token = `%${filters.q!.trim()}%`;
+      const token = `%${escapeIlikePattern(rawQuery)}%`;
       const param = addParam(token);
-      where.push(config.searchClause.replace(/\$SEARCH/g, param));
+      where.push(config.searchClause.replace(/\$SEARCH/g, `${param} ESCAPE '\\'`));
     }
 
     if (filters.district) {
@@ -127,6 +133,10 @@ export class ParcelsService {
       isSearch,
       filters.includeGeometry,
     );
+    // Không cho dump geometry toàn bảng nếu không có search hợp lệ / bbox viewport.
+    if (includeGeometry && !isSearch && !hasBbox) {
+      return { source, mode: 'parcels' as const, items: [], clusters: [], truncated: false, returned: 0 };
+    }
     const limit = this.resolveListLimit(filters, isSearch, hasBbox, includeGeometry);
     const geometryColumn = includeGeometry ? geometryColumnForSource(source) : '';
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';

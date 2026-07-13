@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { normalizeSearchQuery } from '../shared/address-normalize';
+import { isUsableSearchQuery, normalizeSearchQuery } from '../shared/address-normalize';
 import { parseParcelSource, type ParcelSource } from '../parcels/parcel-sources';
 import { ElasticService } from './elastic.service';
 
@@ -100,7 +100,7 @@ export class ParcelSearchService {
 
     const source = parseParcelSource(filters.source);
     const query = normalizeSearchQuery(filters.q);
-    if (!query) return [];
+    if (!isUsableSearchQuery(filters.q)) return [];
 
     const limit = Math.min(Math.max(filters.limit || 200, 1), 10000);
     const result = await this.elastic.search<{ id: number }>({
@@ -131,7 +131,7 @@ export class ParcelSearchService {
 
     const source = parseParcelSource(filters.source);
     const query = normalizeSearchQuery(filters.q);
-    if (query.length < 2) return [];
+    if (!isUsableSearchQuery(filters.q)) return [];
 
     const limit = Math.min(Math.max(filters.limit || 10, 1), 20);
 
