@@ -25,6 +25,7 @@ import {
   type TileLoaderStatus,
 } from '../mapTileLoader';
 import { GEOMETRY_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
+import { parcelEdgeLabelsToGeoJson } from '../parcelEdgeLabels';
 import type { Parcel, ParcelSource } from '../types';
 
 export type MapLibreUpdate = {
@@ -110,6 +111,20 @@ function parcelsToGeoJson(parcels: Parcel[]): GeoJSON.FeatureCollection {
         geometry: parcel.geometry_json!,
       })),
   };
+}
+
+function setSelectedParcelSources(map: Map, parcel: Parcel | null) {
+  if (!parcel?.geometry_json) {
+    setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
+    setGeoJsonSource(map, 'selected-parcel-edges', emptyFeatureCollection());
+    return;
+  }
+  setGeoJsonSource(map, 'selected-parcel', parcelToGeoJson(parcel));
+  setGeoJsonSource(map, 'selected-parcel-edges', parcelEdgeLabelsToGeoJson(parcel.geometry_json));
+}
+
+function clearSelectedParcel(map: Map) {
+  setSelectedParcelSources(map, null);
 }
 
 function parcelToGeoJson(parcel: Parcel): GeoJSON.FeatureCollection {
@@ -201,6 +216,7 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'search-parcel-line', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'selected-parcel-fill', showLandLayers && showParcels);
   setLayerVisibility(map, 'selected-parcel-line', showLandLayers && showParcels);
+  setLayerVisibility(map, 'selected-parcel-edge-label', showLandLayers && showParcels);
   setLayerVisibility(map, 'property-buy-circles', isPropertyBuy);
 }
 
@@ -280,6 +296,10 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         data: emptyFeatureCollection(),
       },
       'selected-parcel': {
+        type: 'geojson',
+        data: emptyFeatureCollection(),
+      },
+      'selected-parcel-edges': {
         type: 'geojson',
         data: emptyFeatureCollection(),
       },
@@ -399,6 +419,27 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         },
       },
       {
+        id: 'selected-parcel-edge-label',
+        type: 'symbol',
+        source: 'selected-parcel-edges',
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-font': ['Noto Sans Medium'],
+          'text-size': 12,
+          'text-rotate': ['get', 'angle'],
+          'text-rotation-alignment': 'map',
+          'text-pitch-alignment': 'viewport',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+          'text-anchor': 'center',
+        },
+        paint: {
+          'text-color': '#9f1239',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1.5,
+        },
+      },
+      {
         id: 'property-buy-circles',
         type: 'circle',
         source: 'property-buy-points',
@@ -483,7 +524,7 @@ export function MapLibreView({
       popupRef.current?.remove();
       try {
         const parcel = await fetchParcelById(id, 'land_parcels');
-        setGeoJsonSource(map, 'selected-parcel', parcelToGeoJson(parcel));
+        setSelectedParcelSources(map, parcel);
         popupRef.current = new maplibregl.Popup({ maxWidth: '320px', closeOnClick: true })
           .setLngLat(event.lngLat)
           .setHTML(popupHtml(parcel))
@@ -584,7 +625,7 @@ export function MapLibreView({
         layers: ['parcel-fill', 'search-parcel-fill', 'property-buy-circles'],
       });
       if (!features.length) {
-        setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
+        clearSelectedParcel(map);
       }
     });
 
@@ -629,12 +670,12 @@ export function MapLibreView({
 
     if (!showLandLayers) {
       setGeoJsonSource(map, 'search-parcels', emptyFeatureCollection());
-      setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
+      clearSelectedParcel(map);
     }
 
     if (!showParcels) {
       popupRef.current?.remove();
-      setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
+      clearSelectedParcel(map);
     }
   }, [dataSource, searchQuery, showParcels, showQhsdd, filters.district, filters.ward]);
 
@@ -670,7 +711,7 @@ export function MapLibreView({
     if (!map) return;
 
     popupRef.current?.remove();
-    setGeoJsonSource(map, 'selected-parcel', emptyFeatureCollection());
+    clearSelectedParcel(map);
     onErrorRef.current('');
   }, [dataSource, searchQuery]);
 
