@@ -1,29 +1,28 @@
 /**
  * Edge-length labels for a selected parcel polygon.
  *
- * Visibility formula calibrated on RP26740926281743387
- * (Số 6B Thi Sách — 21 edges, max ≈ 12.8 m): keep major sides only
- * (≈5 labels), hide jogs / notches that clutter the map.
- *
  * Show edge if length_m >= max(EDGE_LABEL_FLOOR_M, maxEdge * EDGE_LABEL_RATIO)
  * when maxEdge is large; for small lots use a relative floor so thin
  * rectangles still get their long sides labeled.
+ *
+ * Thresholds are intentionally loose so most meaningful sides are labeled
+ * (not only the longest faces).
  */
 
 const EARTH_RADIUS_M = 6_371_008.8;
 
-/** Absolute floor (m) for typical urban lots — calibrated on Thi Sách case. */
-export const EDGE_LABEL_FLOOR_M = 6;
+/** Absolute floor (m) — short sides still get labels. */
+export const EDGE_LABEL_FLOOR_M = 2;
 
-/** Relative to longest edge — calibrated so 5.07 / 5.28 m sides stay hidden. */
-export const EDGE_LABEL_RATIO = 0.2;
+/** Relative to longest edge (effectively floor-driven for typical lots). */
+export const EDGE_LABEL_RATIO = 0.15;
 
 /** Soft cap after filtering (longest first). */
-export const EDGE_LABEL_MAX_COUNT = 6;
+export const EDGE_LABEL_MAX_COUNT = 16;
 
 /** Below this max-edge, switch to relative-only threshold (small parcels). */
 const SMALL_LOT_MAX_EDGE_M = 8;
-const SMALL_LOT_RATIO = 0.65;
+const SMALL_LOT_RATIO = 0.35;
 
 export type ParcelEdgeLabel = {
   lengthM: number;

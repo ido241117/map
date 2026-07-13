@@ -102,22 +102,31 @@ function emptyFeatureCollection(): GeoJSON.FeatureCollection {
 }
 
 function parcelsToGeoJson(parcels: Parcel[]): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: parcels
-      .filter((parcel) => parcel.geometry_json)
-      .map((parcel) => {
-        const houseNo = extractHouseNo(parcel.address);
-        return {
-          type: 'Feature' as const,
-          properties: {
-            id: parcel.id,
-            ...(houseNo ? { house_no: houseNo } : {}),
-          },
-          geometry: parcel.geometry_json!,
-        };
-      }),
-  };
+  const features: GeoJSON.Feature[] = [];
+  for (const parcel of parcels) {
+    if (!parcel.geometry_json) continue;
+    features.push({
+      type: 'Feature',
+      properties: { id: parcel.id },
+      geometry: parcel.geometry_json,
+    });
+    const houseNo = extractHouseNo(parcel.address);
+    if (
+      houseNo &&
+      Number.isFinite(parcel.longitude) &&
+      Number.isFinite(parcel.latitude)
+    ) {
+      features.push({
+        type: 'Feature',
+        properties: { id: parcel.id, house_no: houseNo },
+        geometry: {
+          type: 'Point',
+          coordinates: [parcel.longitude, parcel.latitude],
+        },
+      });
+    }
+  }
+  return { type: 'FeatureCollection', features };
 }
 
 function setSelectedParcelSources(map: Map, parcel: Parcel | null) {
@@ -238,15 +247,14 @@ const QHSDD_LABEL_BASE_FILTER = [
 const HOUSE_NO_LABEL_FILTER = [
   'all',
   ['has', 'house_no'],
-  ['!=', ['get', 'house_no'], ''],
+  ['!=', ['to-string', ['get', 'house_no']], ''],
 ] as maplibregl.FilterSpecification;
 
 const HOUSE_NO_LABEL_LAYOUT: maplibregl.SymbolLayerSpecification['layout'] = {
-  'text-field': ['get', 'house_no'],
+  'text-field': ['to-string', ['get', 'house_no']],
   'text-font': ['Noto Sans Medium'],
   'text-size': 11,
   'text-anchor': 'center',
-  // Collision ẩn bớt số khi viewport dày (trông như “hết quota load”) — luôn hiện đủ.
   'text-allow-overlap': true,
   'text-ignore-placement': true,
   'text-padding': 0,
@@ -450,7 +458,8 @@ function buildMapStyle(): maplibregl.StyleSpecification {
           'line-width': 2,
         },
       },
-      // House numbers above fills/selection so click highlight does not cover them.
+      // house_no lives on polygon features; labeling polygons survives overzoom better than
+      // MVT point buckets under MapLibre 5. Centroid layer still shipped for future use.
       {
         id: 'parcel-house-label',
         type: 'symbol',

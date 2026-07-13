@@ -2,8 +2,8 @@
 export const GEOMETRY_MIN_ZOOM = 16;
 export const QHSDD_MIN_ZOOM = 8;
 export const QHSDD_LABEL_MIN_ZOOM = 16;
-/** Số nhà trên thửa — zoom gần hơn một chút để tránh rối. */
-export const HOUSE_NO_LABEL_MIN_ZOOM = 17;
+/** Số nhà trên thửa — chỉ hiện khi zoom rất gần; thấp hơn thì ẩn (không render). */
+export const HOUSE_NO_LABEL_MIN_ZOOM = 18;
 
 export function shouldShowQhsddOverlay(source: string | undefined, _zoom: number, isSearch: boolean) {
   if (isSearch) return false;

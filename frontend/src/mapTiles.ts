@@ -2,7 +2,11 @@ import { wrapMapMvtUrl } from './mapTileLoader';
 
 /** Keep in sync with backend/src/tiles/tile-config.ts */
 export const LAND_PARCELS_LAYER = 'parcels';
+export const LAND_PARCELS_HOUSE_LAYER = 'parcel-housenos';
 export const QHSDD_LAYER = 'qhsdd';
+
+/** Bust browser HTTP cache when MVT schema/layers change (must match backend MVT_CACHE_SCHEMA). */
+export const MVT_CACHE_SCHEMA = 5;
 
 export const LAND_PARCELS_MIN_ZOOM = 8;
 /** Pre-gen tới z16 — MapLibre overzoom z17+ (db.md §9). */
@@ -29,21 +33,21 @@ export type AdminTileFilter = {
   ward?: string;
 };
 
-function appendAdminQuery(base: string, admin?: AdminTileFilter): string {
+function appendTileQuery(base: string, admin?: AdminTileFilter): string {
   const params = new URLSearchParams();
+  params.set('v', String(MVT_CACHE_SCHEMA));
   if (admin?.district?.trim()) params.set('district', admin.district.trim());
   if (admin?.ward?.trim()) params.set('ward', admin.ward.trim());
-  const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
+  return `${base}?${params.toString()}`;
 }
 
 /** Protocol-wrapped so loads go through concurrency limit + retry (see mapTileLoader). */
 export function landParcelsTileUrl(admin?: AdminTileFilter) {
   return wrapMapMvtUrl(
-    appendAdminQuery(`${absoluteApiBase()}/tiles/land-parcels/{z}/{x}/{y}`, admin),
+    appendTileQuery(`${absoluteApiBase()}/tiles/land-parcels/{z}/{x}/{y}`, admin),
   );
 }
 
 export function qhsddTileUrl(admin?: AdminTileFilter) {
-  return wrapMapMvtUrl(appendAdminQuery(`${absoluteApiBase()}/tiles/qhsdd/{z}/{x}/{y}`, admin));
+  return wrapMapMvtUrl(appendTileQuery(`${absoluteApiBase()}/tiles/qhsdd/{z}/{x}/{y}`, admin));
 }

@@ -2,6 +2,8 @@ import * as path from 'node:path';
 
 /** MVT layer names — must match MapLibre `source-layer` in Phase 3. */
 export const LAND_PARCELS_LAYER = 'parcels';
+/** Point centroids + house_no — symbol labels (polygon labels fail on overzoom). */
+export const LAND_PARCELS_HOUSE_LAYER = 'parcel-housenos';
 export const QHSDD_LAYER = 'qhsdd';
 
 export const MVT_EXTENT = 4096;
@@ -24,10 +26,13 @@ export const TILE_FEATURE_LIMIT = 8_000;
 export const TILE_CACHE_MAX_AGE_SEC = 86_400;
 
 /**
- * Bump when MVT feature properties change so disk/RAM cache does not serve stale tiles.
- * v2: land-parcels includes `house_no`.
+ * Bump when MVT feature properties / layers change so disk/RAM cache stays coherent.
+ * v2: house_no on polygon props
+ * v3: parcel-housenos point layer for reliable labels
+ * v4: parcel_id (not id) on house points + buffered centroids + house_no on polys
+ * v5: shared tile_parcels CTE so house labels use the same LIMIT set as polygons
  */
-export const MVT_CACHE_SCHEMA = 2;
+export const MVT_CACHE_SCHEMA = 5;
 
 /** Thư mục pre-gen/cache MVT — mặc định `data/tile-cache` (repo root). */
 export function tileCacheRoot(): string {
