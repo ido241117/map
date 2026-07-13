@@ -17,6 +17,13 @@ import {
   landParcelsTileUrl,
   qhsddTileUrl,
 } from '../mapTiles';
+import {
+  ensureMapMvtProtocol,
+  notifyMapInteractionEnd,
+  notifyMapInteractionStart,
+  subscribeTileLoaderStatus,
+  type TileLoaderStatus,
+} from '../mapTileLoader';
 import { GEOMETRY_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
 import type { Parcel, ParcelSource } from '../types';
 
@@ -40,6 +47,7 @@ type MapLibreViewProps = {
   onUpdate: (info: MapLibreUpdate) => void;
   onError: (message: string) => void;
   onReady: () => void;
+  onTileStatus?: (status: TileLoaderStatus) => void;
 };
 
 const BASEMAP_ATTRIBUTION =
@@ -415,6 +423,7 @@ export function MapLibreView({
   onUpdate,
   onError,
   onReady,
+  onTileStatus,
 }: MapLibreViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
@@ -422,6 +431,7 @@ export function MapLibreView({
   const onUpdateRef = useRef(onUpdate);
   const onErrorRef = useRef(onError);
   const onReadyRef = useRef(onReady);
+  const onTileStatusRef = useRef(onTileStatus);
   const dataSourceRef = useRef(dataSource);
   const filtersRef = useRef(filters);
   const searchQueryRef = useRef(searchQuery);
@@ -432,6 +442,7 @@ export function MapLibreView({
   onUpdateRef.current = onUpdate;
   onErrorRef.current = onError;
   onReadyRef.current = onReady;
+  onTileStatusRef.current = onTileStatus;
   dataSourceRef.current = dataSource;
   filtersRef.current = filters;
   searchQueryRef.current = searchQuery;
@@ -439,7 +450,14 @@ export function MapLibreView({
   showQhsddRef.current = showQhsdd;
 
   useEffect(() => {
+    if (!onTileStatus) return;
+    return subscribeTileLoaderStatus((status) => onTileStatusRef.current?.(status));
+  }, [onTileStatus]);
+
+  useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+
+    ensureMapMvtProtocol();
 
     const map = new maplibregl.Map({
       container: containerRef.current,
@@ -447,6 +465,8 @@ export function MapLibreView({
       center: HCM_CENTER,
       zoom: 17,
       attributionControl: { compact: true },
+      // Drop stale zoom-level requests so pans/zooms do not pile up behind the tunnel.
+      cancelPendingTileRequestsWhileZooming: true,
     });
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
@@ -519,11 +539,20 @@ export function MapLibreView({
       emitUpdate(map, (info) => onUpdateRef.current(info));
     });
 
+    map.on('movestart', () => notifyMapInteractionStart());
+    map.on('zoomstart', () => notifyMapInteractionStart());
+    map.on('moveend', () => notifyMapInteractionEnd());
+    map.on('zoomend', () => notifyMapInteractionEnd());
+
     map.on('error', (event) => {
       const message = event.error?.message;
       if (!message) return;
       // MapLibre throws this when vector source tiles are cleared with setTiles([]).
       if (/reading 'replace'/i.test(message)) return;
+      // Aborted tiles during pan/zoom are expected with cancelPendingTileRequestsWhileZooming.
+      if (/abort|aborted|AbortError/i.test(message)) return;
+      // Transient tile holes after retries are noisy; user can pan to re-request.
+      if (/Tile HTTP|Tile fetch failed/i.test(message)) return;
       onErrorRef.current(message);
     });
 

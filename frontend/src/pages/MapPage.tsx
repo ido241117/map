@@ -3,6 +3,7 @@ import { Alert, AutoComplete, Card, Checkbox, Input, Select, Spin, Typography } 
 import { fetchParcelAddressSuggest, fetchStats, type ParcelQuery } from '../api';
 import { MapLibreView, type MapLibreUpdate } from '../components/MapLibreView';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import type { TileLoaderStatus } from '../mapTileLoader';
 import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelSource, type Stats } from '../types';
 
 function formatNumber(value: number | string | undefined) {
@@ -22,6 +23,7 @@ export function MapPage() {
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [mapInfo, setMapInfo] = useState<MapLibreUpdate | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [tileStatus, setTileStatus] = useState<TileLoaderStatus | null>(null);
   const [error, setError] = useState('');
   const [mapFocus, setMapFocus] = useState<{
     lat: number;
@@ -116,6 +118,12 @@ export function MapPage() {
   const showsDistrictFilters = isParcelDataSource(dataSource);
   const showsQhsddOverlay = dataSource === 'land_parcels';
   const mapZoom = mapInfo?.zoom ?? 17;
+  const tilesLoading = Boolean(tileStatus && tileStatus.inflight > 0);
+  const tileStatusLabel = tileStatus?.slow
+    ? 'Đang tải (mạng chậm)…'
+    : tilesLoading
+      ? 'Đang tải thửa…'
+      : null;
 
   const suggestOptions = useMemo(
     () =>
@@ -212,6 +220,12 @@ export function MapPage() {
             <Spin />
           </div>
         ) : null}
+        {mapReady && tileStatusLabel ? (
+          <div className="map-tile-status" role="status" aria-live="polite">
+            <Spin size="small" />
+            <span>{tileStatusLabel}</span>
+          </div>
+        ) : null}
         <MapLibreView
           dataSource={dataSource}
           filters={filters}
@@ -223,6 +237,7 @@ export function MapPage() {
           onUpdate={setMapInfo}
           onError={setError}
           onReady={() => setMapReady(true)}
+          onTileStatus={setTileStatus}
         />
       </div>
 

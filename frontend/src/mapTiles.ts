@@ -1,3 +1,5 @@
+import { wrapMapMvtUrl } from './mapTileLoader';
+
 /** Keep in sync with backend/src/tiles/tile-config.ts */
 export const LAND_PARCELS_LAYER = 'parcels';
 export const QHSDD_LAYER = 'qhsdd';
@@ -35,10 +37,13 @@ function appendAdminQuery(base: string, admin?: AdminTileFilter): string {
   return qs ? `${base}?${qs}` : base;
 }
 
+/** Protocol-wrapped so loads go through concurrency limit + retry (see mapTileLoader). */
 export function landParcelsTileUrl(admin?: AdminTileFilter) {
-  return appendAdminQuery(`${absoluteApiBase()}/tiles/land-parcels/{z}/{x}/{y}`, admin);
+  return wrapMapMvtUrl(
+    appendAdminQuery(`${absoluteApiBase()}/tiles/land-parcels/{z}/{x}/{y}`, admin),
+  );
 }
 
 export function qhsddTileUrl(admin?: AdminTileFilter) {
-  return appendAdminQuery(`${absoluteApiBase()}/tiles/qhsdd/{z}/{x}/{y}`, admin);
+  return wrapMapMvtUrl(appendAdminQuery(`${absoluteApiBase()}/tiles/qhsdd/{z}/{x}/{y}`, admin));
 }

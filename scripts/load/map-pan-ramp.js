@@ -109,6 +109,7 @@ async function runStage(users) {
     totalBytes,
     throughputMbps: (totalBytes * 8) / DURATION_SEC / 1_000_000,
     burstP50: percentile(latencies, 50),
+    burstP75: percentile(latencies, 75),
     burstP95: percentile(latencies, 95),
     burstP99: percentile(latencies, 99),
     errRatePct,
@@ -122,6 +123,7 @@ function printMapPanResults(rows) {
     '  Pans'.padStart(6) +
     '  Tiles/pan'.padStart(10) +
     '  Burst p50'.padStart(11) +
+    '  Burst p75'.padStart(11) +
     '  Burst p95'.padStart(11) +
     '  MB/s'.padStart(8) +
     '  Err%'.padStart(7);
@@ -134,6 +136,7 @@ function printMapPanResults(rows) {
         String(row.pans).padStart(6) +
         String(row.tilesPerPan).padStart(10) +
         ms(row.burstP50).padStart(11) +
+        ms(row.burstP75).padStart(11) +
         ms(row.burstP95).padStart(11) +
         row.throughputMbps.toFixed(1).padStart(8) +
         `${row.errRatePct.toFixed(2)}%`.padStart(7),
