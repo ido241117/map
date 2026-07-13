@@ -17,7 +17,8 @@ export function MapPage() {
     Omit<ParcelQuery, 'minLat' | 'maxLat' | 'minLng' | 'maxLng' | 'includeGeometry' | 'source'>
   >({});
   const [searchInput, setSearchInput] = useState('');
-  const debouncedSearch = useDebouncedValue(searchInput, 400);
+  // Chỉ chạy tìm thửa khi Enter / chọn gợi ý — không debounce theo từng lần dừng gõ.
+  const [committedSearch, setCommittedSearch] = useState('');
   const debouncedSuggest = useDebouncedValue(searchInput, 250);
   const [suggestions, setSuggestions] = useState<ParcelAddressSuggestion[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
@@ -35,8 +36,8 @@ export function MapPage() {
   const [showQhsdd, setShowQhsdd] = useState(true);
 
   const activeFilters = useMemo(
-    () => ({ ...filters, source: dataSource, q: debouncedSearch || undefined }),
-    [filters, debouncedSearch, dataSource],
+    () => ({ ...filters, source: dataSource, q: committedSearch || undefined }),
+    [filters, committedSearch, dataSource],
   );
 
   const filtersVersion = useMemo(
@@ -89,12 +90,29 @@ export function MapPage() {
 
   const resetFilters = () => {
     setSearchInput('');
+    setCommittedSearch('');
     setFilters({});
     setMapFocus(null);
   };
 
-  const handleAddressSelect = (value: string) => {
+  const commitSearch = (raw: string) => {
+    const query = raw.trim();
+    setSearchInput(query);
+    setCommittedSearch(query);
+    if (!query) setMapFocus(null);
+  };
+
+  const handleSearchInputChange = (value: string) => {
     setSearchInput(value);
+    // Xóa ô tìm → thoát chế độ search ngay, không đợi Enter.
+    if (!value.trim()) {
+      setCommittedSearch('');
+      setMapFocus(null);
+    }
+  };
+
+  const handleAddressSelect = (value: string) => {
+    commitSearch(value);
     const item = suggestions.find(
       (suggestion) =>
         (suggestion.street_name || suggestion.full_address || suggestion.address) === value,
@@ -118,6 +136,9 @@ export function MapPage() {
   const isPropertyBuySource = dataSource === 'property_buy_records';
   const showsDistrictFilters = isParcelDataSource(dataSource);
   const showsQhsddOverlay = dataSource === 'land_parcels';
+  const isAddressSearch = showsQhsddOverlay && Boolean(committedSearch.trim());
+  // Đang tìm theo tên đường → tự tắt QHSDD trên UI; giữ preference khi xóa tìm kiếm.
+  const effectiveShowQhsdd = showQhsdd && !isAddressSearch;
   const mapZoom = mapInfo?.zoom ?? 17;
   const tilesLoading = Boolean(tileStatus && tileStatus.inflight > 0);
   const tileStatusLabel = tileStatus?.slow
@@ -159,14 +180,15 @@ export function MapPage() {
             className="map-filter-search"
             value={searchInput}
             options={suggestOptions}
-            onSearch={setSearchInput}
-            onChange={setSearchInput}
+            onSearch={handleSearchInputChange}
+            onChange={handleSearchInputChange}
             onSelect={handleAddressSelect}
             notFoundContent={suggestLoading ? <Spin size="small" /> : 'Không có gợi ý'}
           >
             <Input
               allowClear
-              placeholder="Tìm theo tên đường..."
+              placeholder="Tìm theo tên đường (Enter)..."
+              onPressEnter={(event) => commitSearch(event.currentTarget.value)}
             />
           </AutoComplete>
           {!isPropertyBuySource && showsDistrictFilters ? (
@@ -208,7 +230,11 @@ export function MapPage() {
               <Checkbox checked={showParcels} onChange={(event) => setShowParcels(event.target.checked)}>
                 Thửa đất
               </Checkbox>
-              <Checkbox checked={showQhsdd} onChange={(event) => setShowQhsdd(event.target.checked)}>
+              <Checkbox
+                checked={effectiveShowQhsdd}
+                disabled={isAddressSearch}
+                onChange={(event) => setShowQhsdd(event.target.checked)}
+              >
                 QHSDD
               </Checkbox>
             </div>
@@ -233,10 +259,10 @@ export function MapPage() {
           dataSource={dataSource}
           filters={filters}
           filtersVersion={filtersVersion}
-          searchQuery={debouncedSearch}
+          searchQuery={committedSearch}
           focusTarget={mapFocus}
           showParcels={showParcels}
-          showQhsdd={showQhsdd}
+          showQhsdd={effectiveShowQhsdd}
           onUpdate={setMapInfo}
           onError={setError}
           onReady={() => setMapReady(true)}

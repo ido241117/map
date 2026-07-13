@@ -72,8 +72,7 @@ function popupHtml(parcel: Parcel) {
   const location = [parcel.ward, parcel.district].filter(Boolean).join(', ');
   return `
     <div class="parcel-popup popup">
-      <strong>${escapeHtml(parcel.address || parcel.property_code || 'Thửa đất')}</strong>
-      <div>Mã: ${escapeHtml(parcel.property_code || '—')}</div>
+      <strong>${escapeHtml(parcel.address || 'Thửa đất')}</strong>
       <div>Diện tích: ${formatNumber(parcel.total_area)} m²</div>
       <div>Loại đất: ${escapeHtml(parcel.planning_land_type || '—')}</div>
       ${location ? `<div>${escapeHtml(location)}</div>` : ''}
@@ -223,9 +222,11 @@ function syncLayerVisibility(
   const showLandLayers = dataSource === 'land_parcels';
   const isPropertyBuy = dataSource === 'property_buy_records';
 
-  setLayerVisibility(map, 'qhsdd-fill', showLandLayers && showQhsdd);
-  setLayerVisibility(map, 'qhsdd-line', showLandLayers && showQhsdd);
-  setLayerVisibility(map, 'qhsdd-label', showLandLayers && showQhsdd);
+  // Ẩn QHSDD khi đang tìm thửa theo tên đường (Elasticsearch) — khớp MapDataLayer.
+  const showQhsddLayer = showLandLayers && showQhsdd && !isSearch;
+  setLayerVisibility(map, 'qhsdd-fill', showQhsddLayer);
+  setLayerVisibility(map, 'qhsdd-line', showQhsddLayer);
+  setLayerVisibility(map, 'qhsdd-label', showQhsddLayer);
   setLayerVisibility(map, 'parcel-fill', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'parcel-line', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);

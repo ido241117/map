@@ -124,8 +124,7 @@ function popupHtml(parcel: Parcel) {
   const location = [parcel.ward, parcel.district].filter(Boolean).join(', ');
   return `
     <div class="parcel-popup popup">
-      <strong>${escapeHtml(parcel.address || parcel.property_code || 'Thửa đất')}</strong>
-      <div>Mã: ${escapeHtml(parcel.property_code || '—')}</div>
+      <strong>${escapeHtml(parcel.address || 'Thửa đất')}</strong>
       <div>Diện tích: ${formatNumber(parcel.total_area)} m²</div>
       <div>Loại đất: ${escapeHtml(parcel.planning_land_type || '—')}</div>
       ${location ? `<div>${escapeHtml(location)}</div>` : ''}
