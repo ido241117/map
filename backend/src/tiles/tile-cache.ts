@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { TileKind } from './tile-config';
-import { tileCacheRoot } from './tile-config';
+import { MVT_CACHE_SCHEMA, tileCacheRoot } from './tile-config';
 
 /** Hot tiles in RAM — set TILE_MEMORY_CACHE_MB (e.g. 256) to soak free RAM on pan load. */
 const memoryCache = new Map<string, Buffer>();
@@ -13,7 +13,7 @@ function memoryCacheMaxBytes(): number {
 }
 
 function memoryKey(kind: TileKind, z: number, x: number, y: number): string {
-  return `${kind}/${z}/${x}/${y}`;
+  return `s${MVT_CACHE_SCHEMA}/${kind}/${z}/${x}/${y}`;
 }
 
 function putMemoryCache(key: string, data: Buffer): void {
@@ -39,7 +39,14 @@ function putMemoryCache(key: string, data: Buffer): void {
 }
 
 function tilePath(kind: TileKind, z: number, x: number, y: number): string {
-  return path.join(tileCacheRoot(), kind, String(z), String(x), `${y}.mvt`);
+  return path.join(
+    tileCacheRoot(),
+    `s${MVT_CACHE_SCHEMA}`,
+    kind,
+    String(z),
+    String(x),
+    `${y}.mvt`,
+  );
 }
 
 export async function readCachedTile(

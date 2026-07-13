@@ -16,7 +16,7 @@ const EARTH_RADIUS_M = 6_371_008.8;
 export const EDGE_LABEL_FLOOR_M = 6;
 
 /** Relative to longest edge — calibrated so 5.07 / 5.28 m sides stay hidden. */
-export const EDGE_LABEL_RATIO = 0.45;
+export const EDGE_LABEL_RATIO = 0.2;
 
 /** Soft cap after filtering (longest first). */
 export const EDGE_LABEL_MAX_COUNT = 6;

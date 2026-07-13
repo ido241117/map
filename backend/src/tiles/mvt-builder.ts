@@ -22,6 +22,28 @@ export type AdminTileFilter = {
 /** Tile envelope is EPSG:3857; stored geom is EPSG:4326. */
 const TILE_INTERSECTS = 'geom && ST_Transform(ST_TileEnvelope($1, $2, $3), 4326)';
 
+/**
+ * Compact house number for map labels (matches frontend `extractHouseNo`).
+ * "Số 6B" → "6B"; plain "73" / "54A" / "107/112/5" kept; empty first segment → NULL.
+ */
+const HOUSE_NO_SQL = `
+          NULLIF(
+            COALESCE(
+              NULLIF(substring(btrim(split_part(address, ',', 1)) from '^S.\\s+(\\S.*)$'), ''),
+              CASE
+                WHEN btrim(split_part(address, ',', 1))
+                  ~ '^[0-9]+[A-Za-z]?(/[0-9]+[A-Za-z]?)*(\\s*\\([^)]*\\))?$'
+                THEN btrim(split_part(address, ',', 1))
+              END,
+              CASE
+                WHEN btrim(split_part(address, ',', 1))
+                  ~* '^[A-Za-z][0-9]+[A-Za-z]?(\\s*\\([^)]*\\))?$'
+                THEN btrim(split_part(address, ',', 1))
+              END
+            ),
+            ''
+          )`.trim();
+
 function buildGeomSql(toleranceParam: string | null): string {
   const geom = toleranceParam
     ? `ST_Simplify(geom, ${toleranceParam}::double precision)`
@@ -72,6 +94,7 @@ export function buildLandParcelsMvtQuery(
           property_code,
           district,
           ward,
+          ${HOUSE_NO_SQL} AS house_no,
           ${buildGeomSql(toleranceParam)} AS geom
         FROM land_parcels
         WHERE ${whereSql}

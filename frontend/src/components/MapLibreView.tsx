@@ -24,8 +24,9 @@ import {
   subscribeTileLoaderStatus,
   type TileLoaderStatus,
 } from '../mapTileLoader';
-import { GEOMETRY_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
+import { GEOMETRY_MIN_ZOOM, HOUSE_NO_LABEL_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
 import { parcelEdgeLabelsToGeoJson } from '../parcelEdgeLabels';
+import { extractHouseNo } from '../parcelHouseNo';
 import type { Parcel, ParcelSource } from '../types';
 
 export type MapLibreUpdate = {
@@ -105,11 +106,17 @@ function parcelsToGeoJson(parcels: Parcel[]): GeoJSON.FeatureCollection {
     type: 'FeatureCollection',
     features: parcels
       .filter((parcel) => parcel.geometry_json)
-      .map((parcel) => ({
-        type: 'Feature' as const,
-        properties: { id: parcel.id },
-        geometry: parcel.geometry_json!,
-      })),
+      .map((parcel) => {
+        const houseNo = extractHouseNo(parcel.address);
+        return {
+          type: 'Feature' as const,
+          properties: {
+            id: parcel.id,
+            ...(houseNo ? { house_no: houseNo } : {}),
+          },
+          geometry: parcel.geometry_json!,
+        };
+      }),
   };
 }
 
@@ -217,6 +224,8 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'selected-parcel-fill', showLandLayers && showParcels);
   setLayerVisibility(map, 'selected-parcel-line', showLandLayers && showParcels);
   setLayerVisibility(map, 'selected-parcel-edge-label', showLandLayers && showParcels);
+  setLayerVisibility(map, 'parcel-house-label', showLandLayers && showParcels && !isSearch);
+  setLayerVisibility(map, 'search-parcel-house-label', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'property-buy-circles', isPropertyBuy);
 }
 
@@ -225,6 +234,29 @@ const QHSDD_LABEL_BASE_FILTER = [
   ['has', 'loai_dat_quy_hoach'],
   ['!=', ['get', 'loai_dat_quy_hoach'], ''],
 ] as maplibregl.FilterSpecification;
+
+const HOUSE_NO_LABEL_FILTER = [
+  'all',
+  ['has', 'house_no'],
+  ['!=', ['get', 'house_no'], ''],
+] as maplibregl.FilterSpecification;
+
+const HOUSE_NO_LABEL_LAYOUT: maplibregl.SymbolLayerSpecification['layout'] = {
+  'text-field': ['get', 'house_no'],
+  'text-font': ['Noto Sans Medium'],
+  'text-size': 11,
+  'text-anchor': 'center',
+  'text-allow-overlap': false,
+  'text-ignore-placement': false,
+  'text-optional': true,
+  'text-padding': 2,
+};
+
+const HOUSE_NO_LABEL_PAINT: maplibregl.SymbolLayerSpecification['paint'] = {
+  'text-color': '#14532d',
+  'text-halo-color': '#ffffff',
+  'text-halo-width': 1.5,
+};
 
 function hasAdminFilter(filters: { district?: string; ward?: string }) {
   return Boolean(filters.district?.trim() || filters.ward?.trim());
@@ -383,6 +415,16 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         },
       },
       {
+        id: 'parcel-house-label',
+        type: 'symbol',
+        source: 'parcels',
+        'source-layer': LAND_PARCELS_LAYER,
+        minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
+        filter: HOUSE_NO_LABEL_FILTER,
+        layout: HOUSE_NO_LABEL_LAYOUT,
+        paint: HOUSE_NO_LABEL_PAINT,
+      },
+      {
         id: 'search-parcel-fill',
         type: 'fill',
         source: 'search-parcels',
@@ -399,6 +441,15 @@ function buildMapStyle(): maplibregl.StyleSpecification {
           'line-color': '#14532d',
           'line-width': 1.2,
         },
+      },
+      {
+        id: 'search-parcel-house-label',
+        type: 'symbol',
+        source: 'search-parcels',
+        minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
+        filter: HOUSE_NO_LABEL_FILTER,
+        layout: HOUSE_NO_LABEL_LAYOUT,
+        paint: HOUSE_NO_LABEL_PAINT,
       },
       {
         id: 'selected-parcel-fill',

@@ -23,6 +23,12 @@ export const TILE_FEATURE_LIMIT = 8_000;
 
 export const TILE_CACHE_MAX_AGE_SEC = 86_400;
 
+/**
+ * Bump when MVT feature properties change so disk/RAM cache does not serve stale tiles.
+ * v2: land-parcels includes `house_no`.
+ */
+export const MVT_CACHE_SCHEMA = 2;
+
 /** Thư mục pre-gen/cache MVT — mặc định `data/tile-cache` (repo root). */
 export function tileCacheRoot(): string {
   const fromEnv = process.env.TILE_CACHE_DIR?.trim();
