@@ -179,7 +179,7 @@ export function MapPage() {
                   { value: '', label: 'Tất cả quận/huyện' },
                   ...(stats?.districts.map((item) => ({
                     value: item.district,
-                    label: `${item.district} (${item.count})`,
+                    label: item.district,
                   })) ?? []),
                 ]}
               />
@@ -194,7 +194,7 @@ export function MapPage() {
                   { value: '', label: 'Tất cả phường/xã' },
                   ...wards.map((item) => ({
                     value: item.ward,
-                    label: `${item.ward} (${item.count})`,
+                    label: item.ward,
                   })),
                 ]}
               />
