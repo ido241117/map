@@ -45,9 +45,6 @@ db-export/
 # Crawler / scraper tooling (local only)
 scan/
 
-# DB import & ops scripts (local only)
-scripts/
-
 # Accidental spreadsheet drops
 *.xlsx
 plan.md
