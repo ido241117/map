@@ -96,7 +96,8 @@ export function MapPage() {
   const handleAddressSelect = (value: string) => {
     setSearchInput(value);
     const item = suggestions.find(
-      (suggestion) => (suggestion.full_address || suggestion.address) === value,
+      (suggestion) =>
+        (suggestion.street_name || suggestion.full_address || suggestion.address) === value,
     );
     if (!item?.latitude || !item?.longitude) return;
     setMapFocus({
@@ -127,18 +128,20 @@ export function MapPage() {
 
   const suggestOptions = useMemo(
     () =>
-      suggestions.map((item) => ({
-        value: item.full_address || item.address,
-        label: (
-          <div className="address-suggest-option">
-            <div>{item.full_address || item.address}</div>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {[item.ward, item.district].filter(Boolean).join(', ')}
-              {item.property_code ? ` · Mã ${item.property_code}` : ''}
-            </Typography.Text>
-          </div>
-        ),
-      })),
+      suggestions.map((item) => {
+        const streetLabel = item.street_name || item.full_address || item.address;
+        return {
+          value: streetLabel,
+          label: (
+            <div className="address-suggest-option">
+              <div>{streetLabel}</div>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {[item.ward, item.district].filter(Boolean).join(', ')}
+              </Typography.Text>
+            </div>
+          ),
+        };
+      }),
     [suggestions],
   );
 
@@ -163,7 +166,7 @@ export function MapPage() {
           >
             <Input
               allowClear
-              placeholder="Tìm địa chỉ, phường, quận, mã thửa..."
+              placeholder="Tìm theo tên đường..."
             />
           </AutoComplete>
           {!isPropertyBuySource && showsDistrictFilters ? (

@@ -61,6 +61,7 @@ export type ParcelAddressSuggestion = {
   id: number;
   source: ParcelSource;
   address: string;
+  street_name: string;
   full_address: string;
   ward: string;
   district: string;

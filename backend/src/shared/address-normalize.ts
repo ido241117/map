@@ -3,6 +3,7 @@
 const lib = require('../../../lib/address-normalize.js');
 
 export const buildParcelSearchDoc = lib.buildParcelSearchDoc;
+export const extractStreetName = lib.extractStreetName;
 export const normalizeAdminPrefix = lib.normalizeAdminPrefix;
 export const normalizeSearchQuery = lib.normalizeSearchQuery;
 export const removeDiacritics = lib.removeDiacritics;

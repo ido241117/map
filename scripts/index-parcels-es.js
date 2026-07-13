@@ -36,6 +36,14 @@ const INDEX_BODY = {
       property_code: { type: 'keyword' },
       address: { type: 'text', analyzer: 'vn_address' },
       street_line: { type: 'text', analyzer: 'vn_address' },
+      street_name: {
+        type: 'text',
+        analyzer: 'vn_address',
+        fields: {
+          keyword: { type: 'keyword', ignore_above: 256 },
+        },
+      },
+      street_name_norm: { type: 'keyword', ignore_above: 256 },
       full_address: { type: 'text', analyzer: 'vn_address' },
       search_text: { type: 'text', analyzer: 'vn_address' },
       ward: { type: 'keyword' },

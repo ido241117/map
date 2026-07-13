@@ -7,6 +7,7 @@ export type ParcelSearchHit = {
   id: number;
   source: ParcelSource;
   address: string;
+  street_name: string;
   full_address: string;
   ward: string;
   district: string;
@@ -25,6 +26,70 @@ type SearchFilters = {
   limit?: number;
 };
 
+function buildStreetMust(query: string) {
+  return {
+    bool: {
+      should: [
+        {
+          match_phrase_prefix: {
+            street_name: {
+              query,
+              boost: 4,
+            },
+          },
+        },
+        {
+          match: {
+            street_name: {
+              query,
+              operator: 'and',
+              boost: 3,
+            },
+          },
+        },
+        {
+          prefix: {
+            street_name_norm: {
+              value: query,
+              boost: 2,
+            },
+          },
+        },
+        {
+          match: {
+            search_text: {
+              query,
+              operator: 'and',
+              boost: 1,
+            },
+          },
+        },
+      ],
+      minimum_should_match: 1,
+    },
+  };
+}
+
+function buildAdminFilter(source: ParcelSource, district?: string, ward?: string) {
+  const filter: Record<string, unknown>[] = [
+    { term: { source } },
+    {
+      bool: {
+        must_not: [{ term: { street_name_norm: '' } }],
+      },
+    },
+  ];
+
+  if (district?.trim()) {
+    filter.push({ term: { district: district.trim() } });
+  }
+  if (ward?.trim()) {
+    filter.push({ term: { ward: ward.trim() } });
+  }
+
+  return filter;
+}
+
 @Injectable()
 export class ParcelSearchService {
   constructor(private readonly elastic: ElasticService) {}
@@ -38,41 +103,12 @@ export class ParcelSearchService {
     if (!query) return [];
 
     const limit = Math.min(Math.max(filters.limit || 200, 1), 10000);
-    const must: Record<string, unknown>[] = [
-      {
-        multi_match: {
-          query,
-          fields: [
-            'search_text^4',
-            'full_address^3',
-            'address^2',
-            'street_line^2',
-            'property_code^2',
-            'ward^1.5',
-            'district^1.5',
-            'province',
-          ],
-          type: 'best_fields',
-          fuzziness: 'AUTO',
-        },
-      },
-    ];
-
-    const filter: Record<string, unknown>[] = [{ term: { source } }];
-
-    if (filters.district?.trim()) {
-      filter.push({ term: { district: filters.district.trim() } });
-    }
-    if (filters.ward?.trim()) {
-      filter.push({ term: { ward: filters.ward.trim() } });
-    }
-
     const result = await this.elastic.search<{ id: number }>({
       size: limit,
       query: {
         bool: {
-          must,
-          filter,
+          must: [buildStreetMust(query)],
+          filter: buildAdminFilter(source, filters.district, filters.ward),
         },
       },
       _source: ['id'],
@@ -98,19 +134,12 @@ export class ParcelSearchService {
     if (query.length < 2) return [];
 
     const limit = Math.min(Math.max(filters.limit || 10, 1), 20);
-    const filter: Record<string, unknown>[] = [{ term: { source } }];
-
-    if (filters.district?.trim()) {
-      filter.push({ term: { district: filters.district.trim() } });
-    }
-    if (filters.ward?.trim()) {
-      filter.push({ term: { ward: filters.ward.trim() } });
-    }
 
     const result = await this.elastic.search<{
       id: number;
       source: ParcelSource;
       address: string;
+      street_name: string;
       full_address: string;
       ward: string;
       district: string;
@@ -120,30 +149,18 @@ export class ParcelSearchService {
       longitude: number;
     }>({
       size: limit,
+      collapse: { field: 'street_name.keyword' },
       query: {
         bool: {
-          must: [
-            {
-              multi_match: {
-                query,
-                fields: [
-                  'search_text^4',
-                  'full_address^3',
-                  'address^2',
-                  'ward^1.5',
-                  'district^1.5',
-                ],
-                type: 'bool_prefix',
-              },
-            },
-          ],
-          filter,
+          must: [buildStreetMust(query)],
+          filter: buildAdminFilter(source, filters.district, filters.ward),
         },
       },
       _source: [
         'id',
         'source',
         'address',
+        'street_name',
         'full_address',
         'ward',
         'district',
@@ -160,6 +177,7 @@ export class ParcelSearchService {
         if (!doc) return null;
         return {
           ...doc,
+          street_name: doc.street_name || '',
           score: hit._score ?? 0,
         };
       })
