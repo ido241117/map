@@ -1,91 +1,31 @@
 'use strict';
 
+/** Build a wxh grid of land-parcels paths at zoom z. */
+function parcelGrid(z, x0, y0, w, h) {
+  const paths = [];
+  for (let x = x0; x < x0 + w; x++) {
+    for (let y = y0; y < y0 + h; y++) {
+      paths.push(`/tiles/land-parcels/${z}/${x}/${y}`);
+    }
+  }
+  return paths;
+}
+
 /** z16 viewport ~5k polygon quanh Pasteur / Q1 (zoom 16.3 trên UI). */
-const PARCEL_Z16_VIEWPORT_CENTER = [
-  '/tiles/land-parcels/16/52191/30793',
-  '/tiles/land-parcels/16/52191/30794',
-  '/tiles/land-parcels/16/52191/30795',
-  '/tiles/land-parcels/16/52191/30796',
-  '/tiles/land-parcels/16/52191/30797',
-  '/tiles/land-parcels/16/52192/30793',
-  '/tiles/land-parcels/16/52192/30794',
-  '/tiles/land-parcels/16/52192/30795',
-  '/tiles/land-parcels/16/52192/30796',
-  '/tiles/land-parcels/16/52192/30797',
-  '/tiles/land-parcels/16/52193/30793',
-  '/tiles/land-parcels/16/52193/30794',
-  '/tiles/land-parcels/16/52193/30795',
-  '/tiles/land-parcels/16/52193/30796',
-  '/tiles/land-parcels/16/52193/30797',
-  '/tiles/land-parcels/16/52194/30793',
-  '/tiles/land-parcels/16/52194/30794',
-  '/tiles/land-parcels/16/52194/30795',
-  '/tiles/land-parcels/16/52194/30796',
-  '/tiles/land-parcels/16/52194/30797',
-  '/tiles/land-parcels/16/52195/30793',
-  '/tiles/land-parcels/16/52195/30794',
-  '/tiles/land-parcels/16/52195/30795',
-  '/tiles/land-parcels/16/52195/30796',
-  '/tiles/land-parcels/16/52195/30797',
-];
-
+const PARCEL_Z16_VIEWPORT_CENTER = parcelGrid(16, 52191, 30793, 5, 5);
 /** Pan nhẹ sang phải — ~40% tile mới (MapLibre giữ overlap). */
-const PARCEL_Z16_VIEWPORT_EAST = [
-  '/tiles/land-parcels/16/52192/30793',
-  '/tiles/land-parcels/16/52192/30794',
-  '/tiles/land-parcels/16/52192/30795',
-  '/tiles/land-parcels/16/52192/30796',
-  '/tiles/land-parcels/16/52192/30797',
-  '/tiles/land-parcels/16/52193/30793',
-  '/tiles/land-parcels/16/52193/30794',
-  '/tiles/land-parcels/16/52193/30795',
-  '/tiles/land-parcels/16/52193/30796',
-  '/tiles/land-parcels/16/52193/30797',
-  '/tiles/land-parcels/16/52194/30793',
-  '/tiles/land-parcels/16/52194/30794',
-  '/tiles/land-parcels/16/52194/30795',
-  '/tiles/land-parcels/16/52194/30796',
-  '/tiles/land-parcels/16/52194/30797',
-  '/tiles/land-parcels/16/52195/30793',
-  '/tiles/land-parcels/16/52195/30794',
-  '/tiles/land-parcels/16/52195/30795',
-  '/tiles/land-parcels/16/52195/30796',
-  '/tiles/land-parcels/16/52195/30797',
-  '/tiles/land-parcels/16/52196/30793',
-  '/tiles/land-parcels/16/52196/30794',
-  '/tiles/land-parcels/16/52196/30795',
-  '/tiles/land-parcels/16/52196/30796',
-  '/tiles/land-parcels/16/52196/30797',
-];
-
+const PARCEL_Z16_VIEWPORT_EAST = parcelGrid(16, 52192, 30793, 5, 5);
 /** Pan nhẹ lên — viewport lệch phía bắc. */
-const PARCEL_Z16_VIEWPORT_NORTH = [
-  '/tiles/land-parcels/16/52191/30792',
-  '/tiles/land-parcels/16/52191/30793',
-  '/tiles/land-parcels/16/52191/30794',
-  '/tiles/land-parcels/16/52191/30795',
-  '/tiles/land-parcels/16/52191/30796',
-  '/tiles/land-parcels/16/52192/30792',
-  '/tiles/land-parcels/16/52192/30793',
-  '/tiles/land-parcels/16/52192/30794',
-  '/tiles/land-parcels/16/52192/30795',
-  '/tiles/land-parcels/16/52192/30796',
-  '/tiles/land-parcels/16/52193/30792',
-  '/tiles/land-parcels/16/52193/30793',
-  '/tiles/land-parcels/16/52193/30794',
-  '/tiles/land-parcels/16/52193/30795',
-  '/tiles/land-parcels/16/52193/30796',
-  '/tiles/land-parcels/16/52194/30792',
-  '/tiles/land-parcels/16/52194/30793',
-  '/tiles/land-parcels/16/52194/30794',
-  '/tiles/land-parcels/16/52194/30795',
-  '/tiles/land-parcels/16/52194/30796',
-  '/tiles/land-parcels/16/52195/30792',
-  '/tiles/land-parcels/16/52195/30793',
-  '/tiles/land-parcels/16/52195/30794',
-  '/tiles/land-parcels/16/52195/30795',
-  '/tiles/land-parcels/16/52195/30796',
-];
+const PARCEL_Z16_VIEWPORT_NORTH = parcelGrid(16, 52191, 30792, 5, 5);
+
+/**
+ * z17 — cùng ~5×5 tile trên màn hình (giống mật độ request z16),
+ * mỗi tile phủ 1/4 diện tích → ít polygon/tile hơn.
+ * Center ≈ child của z16 52193/30795.
+ */
+const PARCEL_Z17_VIEWPORT_CENTER = parcelGrid(17, 104385, 61589, 5, 5);
+const PARCEL_Z17_VIEWPORT_EAST = parcelGrid(17, 104387, 61589, 5, 5);
+const PARCEL_Z17_VIEWPORT_NORTH = parcelGrid(17, 104385, 61587, 5, 5);
 
 /** QHSDD layer — MapLibre overzoom từ z12; load lúc vào vùng. */
 const QHSDD_BOOTSTRAP_TILES = [
@@ -95,7 +35,7 @@ const QHSDD_BOOTSTRAP_TILES = [
   '/tiles/qhsdd/10/815/481',
 ];
 
-/** OSM highways — cùng z/x/y với parcels (minzoom 16 trên UI). */
+/** OSM highways — cùng z/x/y với parcels. */
 function highwaysFromParcels(parcelPaths) {
   return parcelPaths.map((p) => p.replace('/tiles/land-parcels/', '/tiles/highways/'));
 }
@@ -104,20 +44,44 @@ function withHighways(parcelPaths) {
   return [...parcelPaths, ...highwaysFromParcels(parcelPaths)];
 }
 
-const MAP_PAN_VIEWPORTS = [
+const MAP_PAN_VIEWPORTS_Z16 = [
   PARCEL_Z16_VIEWPORT_CENTER,
   PARCEL_Z16_VIEWPORT_EAST,
   PARCEL_Z16_VIEWPORT_NORTH,
 ];
 
-/** Viewports gồm cả parcels + highways (gần đúng UI khi bật lớp đường). */
-const MAP_PAN_VIEWPORTS_WITH_HIGHWAYS = MAP_PAN_VIEWPORTS.map(withHighways);
+const MAP_PAN_VIEWPORTS_Z17 = [
+  PARCEL_Z17_VIEWPORT_CENTER,
+  PARCEL_Z17_VIEWPORT_EAST,
+  PARCEL_Z17_VIEWPORT_NORTH,
+];
+
+/** @deprecated alias — mặc định z16 */
+const MAP_PAN_VIEWPORTS = MAP_PAN_VIEWPORTS_Z16;
+const MAP_PAN_VIEWPORTS_WITH_HIGHWAYS = MAP_PAN_VIEWPORTS_Z16.map(withHighways);
+const MAP_PAN_VIEWPORTS_Z17_WITH_HIGHWAYS = MAP_PAN_VIEWPORTS_Z17.map(withHighways);
+
+/**
+ * Chọn viewport theo zoom. LOAD_ZOOM=17 → z17 (tile nhẹ hơn / diện tích nhỏ hơn).
+ * Lưu ý UI hiện maxzoom source=16: MapLibre overzoom z17 vẫn gọi URL z16.
+ */
+function viewportsForZoom(zoom, withHw) {
+  const z = Number(zoom) === 17 ? 17 : 16;
+  if (z === 17) {
+    return withHw ? MAP_PAN_VIEWPORTS_Z17_WITH_HIGHWAYS : MAP_PAN_VIEWPORTS_Z17;
+  }
+  return withHw ? MAP_PAN_VIEWPORTS_WITH_HIGHWAYS : MAP_PAN_VIEWPORTS_Z16;
+}
 
 module.exports = {
   PARCEL_Z16_VIEWPORT_CENTER,
+  PARCEL_Z17_VIEWPORT_CENTER,
   MAP_PAN_VIEWPORTS,
   MAP_PAN_VIEWPORTS_WITH_HIGHWAYS,
+  MAP_PAN_VIEWPORTS_Z17,
+  MAP_PAN_VIEWPORTS_Z17_WITH_HIGHWAYS,
   QHSDD_BOOTSTRAP_TILES,
   highwaysFromParcels,
   withHighways,
+  viewportsForZoom,
 };

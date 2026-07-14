@@ -1,11 +1,7 @@
 'use strict';
 
 const { API_URL, smokeCheck, printHeader, summarizeBreakingPoint } = require('./lib');
-const {
-  MAP_PAN_VIEWPORTS,
-  MAP_PAN_VIEWPORTS_WITH_HIGHWAYS,
-  QHSDD_BOOTSTRAP_TILES,
-} = require('./map-viewports');
+const { QHSDD_BOOTSTRAP_TILES, viewportsForZoom } = require('./map-viewports');
 
 const STAGES = (process.env.LOAD_STAGES || '5,10,20,30,50')
   .split(',')
@@ -23,7 +19,9 @@ const INCLUDE_HIGHWAYS = process.env.LOAD_INCLUDE_HIGHWAYS !== '0';
  * Giống frontend mapTileLoader (idle 6 / moving 3): LOAD_TILE_CONCURRENCY=6
  */
 const TILE_CONCURRENCY = Math.max(0, Number(process.env.LOAD_TILE_CONCURRENCY || 0) || 0);
-const VIEWPORTS = INCLUDE_HIGHWAYS ? MAP_PAN_VIEWPORTS_WITH_HIGHWAYS : MAP_PAN_VIEWPORTS;
+/** 16 (mặc định) hoặc 17 — cùng 5×5 tile/viewport, z17 = ít polygon/tile hơn */
+const LOAD_ZOOM = Number(process.env.LOAD_ZOOM || 16) === 17 ? 17 : 16;
+const VIEWPORTS = viewportsForZoom(LOAD_ZOOM, INCLUDE_HIGHWAYS);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -180,9 +178,9 @@ function summarizeMapPan(rows) {
   console.log('');
   console.log('--- Summary (server / máy host) ---');
   console.log(
-    `Mỗi pan ≈ ${last.tilesPerPan} tile z16` +
+    `Mỗi pan ≈ ${last.tilesPerPan} tile z${LOAD_ZOOM}` +
       `${INCLUDE_HIGHWAYS ? ' (parcels+highways)' : ''}` +
-      ` dense (~5k polygon trên UI) + nghỉ ~${PAN_INTERVAL_MS / 1000}s`,
+      ` dense + nghỉ ~${PAN_INTERVAL_MS / 1000}s`,
   );
 
   if (!bad) {
@@ -216,7 +214,7 @@ async function main() {
     console.log(`Smoke OK — highways tile ~${smoke.highwaysBytes} bytes`);
   }
   console.log(
-    `Config: ${DURATION_SEC}s/stage | pan interval ~${PAN_INTERVAL_MS / 1000}s (+0–${PAN_JITTER_MS / 1000}s jitter) | qhsdd=${INCLUDE_QHSDD ? 'on' : 'off'} | highways=${INCLUDE_HIGHWAYS ? 'on' : 'off'} | tileConcurrency=${TILE_CONCURRENCY || 'burst'}`,
+    `Config: ${DURATION_SEC}s/stage | zoom=z${LOAD_ZOOM} | pan interval ~${PAN_INTERVAL_MS / 1000}s (+0–${PAN_JITTER_MS / 1000}s jitter) | qhsdd=${INCLUDE_QHSDD ? 'on' : 'off'} | highways=${INCLUDE_HIGHWAYS ? 'on' : 'off'} | tileConcurrency=${TILE_CONCURRENCY || 'burst'}`,
   );
   console.log('');
   console.log('Trong lúc chạy: mở Task Manager + docker stats + log backend terminal.');

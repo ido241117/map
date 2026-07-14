@@ -19,8 +19,8 @@ export const QHSDD_MIN_ZOOM = 8;
 export const QHSDD_MAX_TILE_ZOOM = 12;
 /** Pre-gen + serve tới z16; MapLibre overzoom z17+ (db.md §9). */
 export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
-/** Lớp lộ giới — hiện từ z15 (MapLibre + serve MVT). */
-export const HIGHWAYS_MIN_ZOOM = 15;
+/** Lớp lộ giới — hiện từ z10 (MapLibre + serve MVT). */
+export const HIGHWAYS_MIN_ZOOM = 10;
 export const HIGHWAYS_MAX_TILE_ZOOM = 16;
 
 export const HCM_PROVINCE_CODE = '79';

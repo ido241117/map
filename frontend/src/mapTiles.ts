@@ -15,8 +15,8 @@ export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
 export const QHSDD_MIN_ZOOM = 8;
 /** Khớp crawl QHSDD — MapLibre overzoom, tránh đổi hình khi zoom 13↔14. */
 export const QHSDD_MAX_TILE_ZOOM = 12;
-/** Lớp lộ giới — hiện từ z15. */
-export const HIGHWAYS_MIN_ZOOM = 15;
+/** Lớp lộ giới — hiện từ z10. */
+export const HIGHWAYS_MIN_ZOOM = 10;
 export const HIGHWAYS_MAX_TILE_ZOOM = 16;
 
 export const HCM_CENTER: [number, number] = [106.7009, 10.7769];
