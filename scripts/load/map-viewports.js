@@ -95,14 +95,29 @@ const QHSDD_BOOTSTRAP_TILES = [
   '/tiles/qhsdd/10/815/481',
 ];
 
+/** OSM highways — cùng z/x/y với parcels (minzoom 16 trên UI). */
+function highwaysFromParcels(parcelPaths) {
+  return parcelPaths.map((p) => p.replace('/tiles/land-parcels/', '/tiles/highways/'));
+}
+
+function withHighways(parcelPaths) {
+  return [...parcelPaths, ...highwaysFromParcels(parcelPaths)];
+}
+
 const MAP_PAN_VIEWPORTS = [
   PARCEL_Z16_VIEWPORT_CENTER,
   PARCEL_Z16_VIEWPORT_EAST,
   PARCEL_Z16_VIEWPORT_NORTH,
 ];
 
+/** Viewports gồm cả parcels + highways (gần đúng UI khi bật lớp đường). */
+const MAP_PAN_VIEWPORTS_WITH_HIGHWAYS = MAP_PAN_VIEWPORTS.map(withHighways);
+
 module.exports = {
   PARCEL_Z16_VIEWPORT_CENTER,
   MAP_PAN_VIEWPORTS,
+  MAP_PAN_VIEWPORTS_WITH_HIGHWAYS,
   QHSDD_BOOTSTRAP_TILES,
+  highwaysFromParcels,
+  withHighways,
 };

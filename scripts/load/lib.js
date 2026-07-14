@@ -43,7 +43,20 @@ async function smokeCheck() {
   }
   const tileBytes = Number(tile.headers.get('content-length') || (await tile.arrayBuffer()).byteLength);
 
-  return { health: true, tileBytes };
+  // z16 highways — lớp mới; warn nếu OSM DB chưa lên (không fail smoke cũ).
+  let highwaysBytes = null;
+  try {
+    const hw = await fetch(`${API_URL}/tiles/highways/16/52193/30795`);
+    if (hw.ok) {
+      highwaysBytes = Number(hw.headers.get('content-length') || (await hw.arrayBuffer()).byteLength);
+    } else {
+      console.warn(`Smoke warn — highways tile ${hw.status} (OSM_DATABASE_URL / db highways?)`);
+    }
+  } catch (err) {
+    console.warn(`Smoke warn — highways unreachable: ${err.message}`);
+  }
+
+  return { health: true, tileBytes, highwaysBytes };
 }
 
 async function runBench({ label, connections, requests, headers }) {

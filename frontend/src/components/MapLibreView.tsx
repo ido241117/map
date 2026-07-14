@@ -21,6 +21,7 @@ import {
   landParcelsTileUrl,
   qhsddTileUrl,
 } from '../mapTiles';
+import { loadMapViewport, saveMapViewport } from '../mapUserSettings';
 import {
   ensureMapMvtProtocol,
   notifyMapInteractionEnd,
@@ -50,6 +51,7 @@ type MapLibreViewProps = {
   searchQuery?: string;
   focusTarget?: { lat: number; lng: number; zoom?: number; key: string } | null;
   showParcels?: boolean;
+  showHighways?: boolean;
   showQhsdd?: boolean;
   onUpdate: (info: MapLibreUpdate) => void;
   onError: (message: string) => void;
@@ -221,6 +223,7 @@ function syncLayerVisibility(
   dataSource: ParcelSource,
   searchQuery: string,
   showParcels: boolean,
+  showHighways: boolean,
   showQhsdd: boolean,
 ) {
   const isSearch = Boolean(searchQuery.trim());
@@ -234,8 +237,8 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'qhsdd-label', showQhsddLayer);
   setLayerVisibility(map, 'parcel-fill', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'parcel-line', showLandLayers && showParcels && !isSearch);
-  // Non-interactive overlay — no click/mouse handlers registered on this layer.
-  setLayerVisibility(map, 'highways-line', showLandLayers && showParcels && !isSearch);
+  // Non-interactive overlay — controlled by the separate "Lộ giới" checkbox.
+  setLayerVisibility(map, 'highways-line', showLandLayers && showHighways);
   setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'search-parcel-line', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'selected-parcel-fill', showLandLayers && showParcels);
@@ -284,34 +287,79 @@ function adminTileFilter(
   return hasAdminFilter(filters) ? filters : undefined;
 }
 
+function layerVisibility(visible: boolean): 'visible' | 'none' {
+  return visible ? 'visible' : 'none';
+}
+
 function syncTileSources(
   map: Map,
   showParcels: boolean,
+  showHighways: boolean,
   showQhsdd: boolean,
   filters: { district?: string; ward?: string },
-  tileUrlCache?: { parcels: string | null; qhsdd: string | null },
+  tileUrlCache?: { parcels: string | null; highways: string | null; qhsdd: string | null },
 ) {
   const admin = adminTileFilter(filters);
   const parcels = map.getSource('parcels') as maplibregl.VectorTileSource | undefined;
-  if (showParcels && parcels && typeof parcels.setTiles === 'function') {
-    const url = landParcelsTileUrl(admin);
-    if (tileUrlCache?.parcels !== url) {
-      parcels.setTiles([url]);
-      if (tileUrlCache) tileUrlCache.parcels = url;
+  if (parcels && typeof parcels.setTiles === 'function') {
+    if (showParcels) {
+      const url = landParcelsTileUrl(admin);
+      if (tileUrlCache?.parcels !== url) {
+        parcels.setTiles([url]);
+        if (tileUrlCache) tileUrlCache.parcels = url;
+      }
+    } else if (tileUrlCache?.parcels !== null) {
+      parcels.setTiles([]);
+      if (tileUrlCache) tileUrlCache.parcels = null;
+    }
+  }
+
+  const highways = map.getSource('highways') as maplibregl.VectorTileSource | undefined;
+  if (highways && typeof highways.setTiles === 'function') {
+    if (showHighways) {
+      const url = highwaysTileUrl();
+      if (tileUrlCache?.highways !== url) {
+        highways.setTiles([url]);
+        if (tileUrlCache) tileUrlCache.highways = url;
+      }
+    } else if (tileUrlCache?.highways !== null) {
+      highways.setTiles([]);
+      if (tileUrlCache) tileUrlCache.highways = null;
     }
   }
 
   const qhsdd = map.getSource('qhsdd') as maplibregl.VectorTileSource | undefined;
-  if (showQhsdd && qhsdd && typeof qhsdd.setTiles === 'function') {
-    const url = qhsddTileUrl(admin);
-    if (tileUrlCache?.qhsdd !== url) {
-      qhsdd.setTiles([url]);
-      if (tileUrlCache) tileUrlCache.qhsdd = url;
+  if (qhsdd && typeof qhsdd.setTiles === 'function') {
+    if (showQhsdd) {
+      const url = qhsddTileUrl(admin);
+      if (tileUrlCache?.qhsdd !== url) {
+        qhsdd.setTiles([url]);
+        if (tileUrlCache) tileUrlCache.qhsdd = url;
+      }
+    } else if (tileUrlCache?.qhsdd !== null) {
+      qhsdd.setTiles([]);
+      if (tileUrlCache) tileUrlCache.qhsdd = null;
     }
   }
 }
 
-function buildMapStyle(): maplibregl.StyleSpecification {
+function buildMapStyle(opts: {
+  showParcels: boolean;
+  showHighways: boolean;
+  showQhsdd: boolean;
+  isSearch: boolean;
+  parcelTiles: string[];
+  qhsddTiles: string[];
+  highwayTiles: string[];
+}): maplibregl.StyleSpecification {
+  const showParcelTiles = opts.showParcels && !opts.isSearch;
+  const showSearchParcels = opts.showParcels && opts.isSearch;
+  const parcelsVis = layerVisibility(showParcelTiles);
+  const searchParcelsVis = layerVisibility(showSearchParcels);
+  const selectedParcelsVis = layerVisibility(opts.showParcels);
+  const highwaysVis = layerVisibility(opts.showHighways);
+  const qhsddVis = layerVisibility(opts.showQhsdd && !opts.isSearch);
+
   return {
     version: 8,
     // demotiles Bold fontstack 404s → broken Vietnamese labels
@@ -329,19 +377,19 @@ function buildMapStyle(): maplibregl.StyleSpecification {
       },
       qhsdd: {
         type: 'vector',
-        tiles: [qhsddTileUrl()],
+        tiles: opts.qhsddTiles,
         minzoom: QHSDD_MIN_ZOOM,
         maxzoom: QHSDD_MAX_TILE_ZOOM,
       },
       parcels: {
         type: 'vector',
-        tiles: [landParcelsTileUrl()],
+        tiles: opts.parcelTiles,
         minzoom: GEOMETRY_MIN_ZOOM,
         maxzoom: LAND_PARCELS_MAX_TILE_ZOOM,
       },
       highways: {
         type: 'vector',
-        tiles: [highwaysTileUrl()],
+        tiles: opts.highwayTiles,
         minzoom: HIGHWAYS_MIN_ZOOM,
         maxzoom: HIGHWAYS_MAX_TILE_ZOOM,
       },
@@ -374,6 +422,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         source: 'qhsdd',
         'source-layer': QHSDD_LAYER,
         minzoom: QHSDD_MIN_ZOOM,
+        layout: { visibility: qhsddVis },
         paint: {
           'fill-color': ['coalesce', ['get', 'fill_hex'], '#94a3b8'],
           'fill-opacity': 0.42,
@@ -385,6 +434,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         source: 'qhsdd',
         'source-layer': QHSDD_LAYER,
         minzoom: QHSDD_MIN_ZOOM,
+        layout: { visibility: qhsddVis },
         paint: {
           'line-color': ['coalesce', ['get', 'fill_hex'], '#94a3b8'],
           'line-opacity': 0.78,
@@ -399,6 +449,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         minzoom: QHSDD_LABEL_MIN_ZOOM,
         filter: QHSDD_LABEL_BASE_FILTER,
         layout: {
+          visibility: qhsddVis,
           'text-field': ['get', 'loai_dat_quy_hoach'],
           'text-font': ['Noto Sans Medium'],
           'text-size': 11,
@@ -419,6 +470,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         source: 'parcels',
         'source-layer': LAND_PARCELS_LAYER,
         minzoom: GEOMETRY_MIN_ZOOM,
+        layout: { visibility: parcelsVis },
         paint: {
           'fill-color': '#22c55e',
           'fill-opacity': 0.28,
@@ -430,6 +482,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         source: 'parcels',
         'source-layer': LAND_PARCELS_LAYER,
         minzoom: GEOMETRY_MIN_ZOOM,
+        layout: { visibility: parcelsVis },
         paint: {
           'line-color': '#14532d',
           'line-opacity': 0.82,
@@ -444,6 +497,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         'source-layer': HIGHWAYS_LAYER,
         minzoom: HIGHWAYS_MIN_ZOOM,
         layout: {
+          visibility: highwaysVis,
           'line-cap': 'round',
           'line-join': 'round',
         },
@@ -463,42 +517,42 @@ function buildMapStyle(): maplibregl.StyleSpecification {
             '#64748b',
             '#94a3b8',
           ],
-          'line-opacity': 0.9,
+          'line-opacity': 0.95,
           'line-width': [
             'interpolate',
             ['linear'],
             ['zoom'],
-            16,
+            15,
             [
               'match',
               ['get', 'highway'],
               'motorway',
-              2.4,
+              3,
               'trunk',
-              2.2,
+              2.8,
               'primary',
-              1.8,
+              2.4,
               'secondary',
-              1.5,
+              2,
               'tertiary',
-              1.3,
-              1,
+              1.7,
+              1.4,
             ],
             18,
             [
               'match',
               ['get', 'highway'],
               'motorway',
-              4,
+              5.5,
               'trunk',
-              3.5,
+              5,
               'primary',
-              3,
+              4.2,
               'secondary',
-              2.4,
+              3.4,
               'tertiary',
+              2.8,
               2,
-              1.4,
             ],
           ],
         },
@@ -507,6 +561,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         id: 'search-parcel-fill',
         type: 'fill',
         source: 'search-parcels',
+        layout: { visibility: searchParcelsVis },
         paint: {
           'fill-color': '#22c55e',
           'fill-opacity': 0.35,
@@ -516,6 +571,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         id: 'search-parcel-line',
         type: 'line',
         source: 'search-parcels',
+        layout: { visibility: searchParcelsVis },
         paint: {
           'line-color': '#14532d',
           'line-width': 1.2,
@@ -525,6 +581,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         id: 'selected-parcel-fill',
         type: 'fill',
         source: 'selected-parcel',
+        layout: { visibility: selectedParcelsVis },
         paint: {
           'fill-color': '#fb7185',
           'fill-opacity': 0.25,
@@ -534,6 +591,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         id: 'selected-parcel-line',
         type: 'line',
         source: 'selected-parcel',
+        layout: { visibility: selectedParcelsVis },
         paint: {
           'line-color': '#e11d48',
           'line-width': 2,
@@ -548,7 +606,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         'source-layer': LAND_PARCELS_LAYER,
         minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
         filter: HOUSE_NO_LABEL_FILTER,
-        layout: HOUSE_NO_LABEL_LAYOUT,
+        layout: { ...HOUSE_NO_LABEL_LAYOUT, visibility: parcelsVis },
         paint: HOUSE_NO_LABEL_PAINT,
       },
       {
@@ -557,7 +615,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         source: 'search-parcels',
         minzoom: HOUSE_NO_LABEL_MIN_ZOOM,
         filter: HOUSE_NO_LABEL_FILTER,
-        layout: HOUSE_NO_LABEL_LAYOUT,
+        layout: { ...HOUSE_NO_LABEL_LAYOUT, visibility: searchParcelsVis },
         paint: HOUSE_NO_LABEL_PAINT,
       },
       {
@@ -565,6 +623,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         type: 'symbol',
         source: 'selected-parcel-edges',
         layout: {
+          visibility: selectedParcelsVis,
           'text-field': ['get', 'label'],
           'text-font': ['Noto Sans Medium'],
           'text-size': 12,
@@ -585,6 +644,7 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         id: 'property-buy-circles',
         type: 'circle',
         source: 'property-buy-points',
+        layout: { visibility: 'none' },
         paint: {
           'circle-radius': 5,
           'circle-color': '#f97316',
@@ -603,8 +663,9 @@ export function MapLibreView({
   filtersVersion,
   searchQuery = '',
   focusTarget = null,
-  showParcels = true,
-  showQhsdd = true,
+  showParcels = false,
+  showHighways = false,
+  showQhsdd = false,
   onUpdate,
   onError,
   onReady,
@@ -621,8 +682,13 @@ export function MapLibreView({
   const filtersRef = useRef(filters);
   const searchQueryRef = useRef(searchQuery);
   const showParcelsRef = useRef(showParcels);
+  const showHighwaysRef = useRef(showHighways);
   const showQhsddRef = useRef(showQhsdd);
-  const tileUrlCacheRef = useRef({ parcels: null as string | null, qhsdd: null as string | null });
+  const tileUrlCacheRef = useRef({
+    parcels: null as string | null,
+    highways: null as string | null,
+    qhsdd: null as string | null,
+  });
 
   onUpdateRef.current = onUpdate;
   onErrorRef.current = onError;
@@ -632,6 +698,7 @@ export function MapLibreView({
   filtersRef.current = filters;
   searchQueryRef.current = searchQuery;
   showParcelsRef.current = showParcels;
+  showHighwaysRef.current = showHighways;
   showQhsddRef.current = showQhsdd;
 
   useEffect(() => {
@@ -644,11 +711,34 @@ export function MapLibreView({
 
     ensureMapMvtProtocol();
 
+    const savedView = loadMapViewport();
+    const admin = adminTileFilter(filtersRef.current);
+    const showParcelsInit = showParcelsRef.current;
+    const showHighwaysInit = showHighwaysRef.current;
+    const showQhsddInit = showQhsddRef.current;
+    const isSearchInit = Boolean(searchQueryRef.current.trim());
+    const parcelUrl = showParcelsInit && !isSearchInit ? landParcelsTileUrl(admin) : null;
+    const qhsddUrl = showQhsddInit && !isSearchInit ? qhsddTileUrl(admin) : null;
+    const highwayUrl = showHighwaysInit ? highwaysTileUrl() : null;
+    tileUrlCacheRef.current = {
+      parcels: parcelUrl,
+      highways: highwayUrl,
+      qhsdd: qhsddUrl,
+    };
+
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: buildMapStyle(),
-      center: HCM_CENTER,
-      zoom: 17,
+      style: buildMapStyle({
+        showParcels: showParcelsInit,
+        showHighways: showHighwaysInit,
+        showQhsdd: showQhsddInit,
+        isSearch: isSearchInit,
+        parcelTiles: parcelUrl ? [parcelUrl] : [],
+        qhsddTiles: qhsddUrl ? [qhsddUrl] : [],
+        highwayTiles: highwayUrl ? [highwayUrl] : [],
+      }),
+      center: savedView ? [savedView.lng, savedView.lat] : HCM_CENTER,
+      zoom: savedView?.zoom ?? 17,
       attributionControl: { compact: true },
       // Drop stale zoom-level requests so pans/zooms do not pile up behind the tunnel.
       cancelPendingTileRequestsWhileZooming: true,
@@ -702,10 +792,12 @@ export function MapLibreView({
 
     map.on('load', () => {
       map.resize();
+      const isSearch = Boolean(searchQueryRef.current.trim());
       syncTileSources(
         map,
-        showParcelsRef.current,
-        showQhsddRef.current,
+        showParcelsRef.current && !isSearch,
+        showHighwaysRef.current,
+        showQhsddRef.current && !isSearch,
         filtersRef.current,
         tileUrlCacheRef.current,
       );
@@ -714,6 +806,7 @@ export function MapLibreView({
         dataSourceRef.current,
         searchQueryRef.current,
         showParcelsRef.current,
+        showHighwaysRef.current,
         showQhsddRef.current,
       );
       onReadyRef.current();
@@ -742,6 +835,12 @@ export function MapLibreView({
     });
 
     map.on('moveend', () => {
+      const center = map.getCenter();
+      saveMapViewport({
+        lng: center.lng,
+        lat: center.lat,
+        zoom: Math.round(map.getZoom() * 10) / 10,
+      });
       emitUpdate(map, (info) => onUpdateRef.current(info));
     });
 
@@ -799,8 +898,16 @@ export function MapLibreView({
 
     const apply = () => {
       onErrorRef.current('');
-      syncLayerVisibility(map, dataSource, searchQuery, showParcels, showQhsdd);
-      syncTileSources(map, showParcels, showQhsdd, filters, tileUrlCacheRef.current);
+      const isSearch = Boolean(searchQuery.trim());
+      syncLayerVisibility(map, dataSource, searchQuery, showParcels, showHighways, showQhsdd);
+      syncTileSources(
+        map,
+        showParcels && !isSearch,
+        showHighways,
+        showQhsdd && !isSearch,
+        filters,
+        tileUrlCacheRef.current,
+      );
       emitUpdate(map, (info) => onUpdateRef.current(info));
     };
 
@@ -819,7 +926,7 @@ export function MapLibreView({
       popupRef.current?.remove();
       clearSelectedParcel(map);
     }
-  }, [dataSource, searchQuery, showParcels, showQhsdd, filters.district, filters.ward]);
+  }, [dataSource, searchQuery, showParcels, showHighways, showQhsdd, filters.district, filters.ward]);
 
   useEffect(() => {
     const map = mapRef.current;

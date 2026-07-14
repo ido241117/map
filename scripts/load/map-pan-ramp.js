@@ -1,7 +1,11 @@
 'use strict';
 
 const { API_URL, smokeCheck, printHeader, summarizeBreakingPoint } = require('./lib');
-const { MAP_PAN_VIEWPORTS, QHSDD_BOOTSTRAP_TILES } = require('./map-viewports');
+const {
+  MAP_PAN_VIEWPORTS,
+  MAP_PAN_VIEWPORTS_WITH_HIGHWAYS,
+  QHSDD_BOOTSTRAP_TILES,
+} = require('./map-viewports');
 
 const STAGES = (process.env.LOAD_STAGES || '5,10,20,30,50')
   .split(',')
@@ -12,6 +16,9 @@ const DURATION_SEC = Number(process.env.LOAD_DURATION_SEC || 60);
 const PAN_INTERVAL_MS = Number(process.env.LOAD_PAN_INTERVAL_MS || 2000);
 const PAN_JITTER_MS = Number(process.env.LOAD_PAN_JITTER_MS || 1000);
 const INCLUDE_QHSDD = process.env.LOAD_INCLUDE_QHSDD !== '0';
+/** Lớp highways mới — mặc định bật (giống UI z16). Tắt: LOAD_INCLUDE_HIGHWAYS=0 */
+const INCLUDE_HIGHWAYS = process.env.LOAD_INCLUDE_HIGHWAYS !== '0';
+const VIEWPORTS = INCLUDE_HIGHWAYS ? MAP_PAN_VIEWPORTS_WITH_HIGHWAYS : MAP_PAN_VIEWPORTS;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -65,17 +72,17 @@ async function panBurst(viewportTiles, withQhsdd) {
 }
 
 async function virtualMapUser(userId, until, samples, withQhsdd) {
-  let panIndex = userId % MAP_PAN_VIEWPORTS.length;
+  let panIndex = userId % VIEWPORTS.length;
   let bootstrappedQhsdd = !withQhsdd;
 
   while (Date.now() < until) {
     const useQhsdd = withQhsdd && !bootstrappedQhsdd;
     if (useQhsdd) bootstrappedQhsdd = true;
 
-    const burst = await panBurst(MAP_PAN_VIEWPORTS[panIndex], useQhsdd);
+    const burst = await panBurst(VIEWPORTS[panIndex], useQhsdd);
     samples.push(burst);
 
-    panIndex = (panIndex + 1) % MAP_PAN_VIEWPORTS.length;
+    panIndex = (panIndex + 1) % VIEWPORTS.length;
 
     const wait =
       PAN_INTERVAL_MS + Math.floor(Math.random() * (PAN_JITTER_MS + 1));
@@ -151,7 +158,9 @@ function summarizeMapPan(rows) {
   console.log('');
   console.log('--- Summary (server / máy host) ---');
   console.log(
-    `Mỗi pan ≈ ${last.tilesPerPan} tile z16 dense (~5k polygon trên UI) + nghỉ ~${PAN_INTERVAL_MS / 1000}s`,
+    `Mỗi pan ≈ ${last.tilesPerPan} tile z16` +
+      `${INCLUDE_HIGHWAYS ? ' (parcels+highways)' : ''}` +
+      ` dense (~5k polygon trên UI) + nghỉ ~${PAN_INTERVAL_MS / 1000}s`,
   );
 
   if (!bad) {
@@ -181,8 +190,11 @@ async function main() {
 
   const smoke = await smokeCheck();
   console.log(`Smoke OK — backend live, sample tile ~${smoke.tileBytes} bytes`);
+  if (smoke.highwaysBytes != null) {
+    console.log(`Smoke OK — highways tile ~${smoke.highwaysBytes} bytes`);
+  }
   console.log(
-    `Config: ${DURATION_SEC}s/stage | pan interval ~${PAN_INTERVAL_MS / 1000}s (+0–${PAN_JITTER_MS / 1000}s jitter) | qhsdd=${INCLUDE_QHSDD ? 'on' : 'off'}`,
+    `Config: ${DURATION_SEC}s/stage | pan interval ~${PAN_INTERVAL_MS / 1000}s (+0–${PAN_JITTER_MS / 1000}s jitter) | qhsdd=${INCLUDE_QHSDD ? 'on' : 'off'} | highways=${INCLUDE_HIGHWAYS ? 'on' : 'off'}`,
   );
   console.log('');
   console.log('Trong lúc chạy: mở Task Manager + docker stats + log backend terminal.');

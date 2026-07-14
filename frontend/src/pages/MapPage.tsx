@@ -4,6 +4,7 @@ import { fetchParcelAddressSuggest, fetchStats, type ParcelQuery } from '../api'
 import { MapLibreView, type MapLibreUpdate } from '../components/MapLibreView';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import type { TileLoaderStatus } from '../mapTileLoader';
+import { loadMapUserSettings, saveMapUserSettings } from '../mapUserSettings';
 import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelSource, type Stats } from '../types';
 import { isUsableStreetSearchQuery } from '../searchQuery';
 
@@ -12,14 +13,18 @@ function formatNumber(value: number | string | undefined) {
 }
 
 export function MapPage() {
-  const [dataSource, setDataSource] = useState<ParcelSource>('land_parcels');
+  const [initialPrefs] = useState(loadMapUserSettings);
+  const [dataSource, setDataSource] = useState<ParcelSource>(initialPrefs.dataSource);
   const [stats, setStats] = useState<Stats | null>(null);
   const [filters, setFilters] = useState<
     Omit<ParcelQuery, 'minLat' | 'maxLat' | 'minLng' | 'maxLng' | 'includeGeometry' | 'source'>
-  >({});
-  const [searchInput, setSearchInput] = useState('');
+  >(() => ({
+    district: initialPrefs.district,
+    ward: initialPrefs.ward,
+  }));
+  const [searchInput, setSearchInput] = useState(initialPrefs.searchInput);
   // Chỉ chạy tìm thửa khi Enter / chọn gợi ý — không debounce theo từng lần dừng gõ.
-  const [committedSearch, setCommittedSearch] = useState('');
+  const [committedSearch, setCommittedSearch] = useState(initialPrefs.committedSearch);
   const debouncedSuggest = useDebouncedValue(searchInput, 250);
   const [suggestions, setSuggestions] = useState<ParcelAddressSuggestion[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
@@ -33,8 +38,31 @@ export function MapPage() {
     zoom?: number;
     key: string;
   } | null>(null);
-  const [showParcels, setShowParcels] = useState(true);
-  const [showQhsdd, setShowQhsdd] = useState(true);
+  const [showParcels, setShowParcels] = useState(initialPrefs.showParcels);
+  const [showHighways, setShowHighways] = useState(initialPrefs.showHighways);
+  const [showQhsdd, setShowQhsdd] = useState(initialPrefs.showQhsdd);
+
+  useEffect(() => {
+    saveMapUserSettings({
+      dataSource,
+      district: filters.district,
+      ward: filters.ward,
+      searchInput,
+      committedSearch,
+      showParcels,
+      showHighways,
+      showQhsdd,
+    });
+  }, [
+    dataSource,
+    filters.district,
+    filters.ward,
+    searchInput,
+    committedSearch,
+    showParcels,
+    showHighways,
+    showQhsdd,
+  ]);
 
   const activeFilters = useMemo(
     () => ({ ...filters, source: dataSource, q: committedSearch || undefined }),
@@ -245,6 +273,12 @@ export function MapPage() {
                 Thửa đất
               </Checkbox>
               <Checkbox
+                checked={showHighways}
+                onChange={(event) => setShowHighways(event.target.checked)}
+              >
+                Lộ giới
+              </Checkbox>
+              <Checkbox
                 checked={effectiveShowQhsdd}
                 disabled={isAddressSearch}
                 onChange={(event) => setShowQhsdd(event.target.checked)}
@@ -276,6 +310,7 @@ export function MapPage() {
           searchQuery={committedSearch}
           focusTarget={mapFocus}
           showParcels={showParcels}
+          showHighways={showHighways}
           showQhsdd={effectiveShowQhsdd}
           onUpdate={setMapInfo}
           onError={setError}
