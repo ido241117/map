@@ -4,6 +4,7 @@ import { wrapMapMvtUrl } from './mapTileLoader';
 export const LAND_PARCELS_LAYER = 'parcels';
 export const LAND_PARCELS_HOUSE_LAYER = 'parcel-housenos';
 export const QHSDD_LAYER = 'qhsdd';
+export const HIGHWAYS_LAYER = 'highways';
 
 /** Bust browser HTTP cache when MVT schema/layers change (must match backend MVT_CACHE_SCHEMA). */
 export const MVT_CACHE_SCHEMA = 5;
@@ -14,6 +15,9 @@ export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
 export const QHSDD_MIN_ZOOM = 8;
 /** Khớp crawl QHSDD — MapLibre overzoom, tránh đổi hình khi zoom 13↔14. */
 export const QHSDD_MAX_TILE_ZOOM = 12;
+/** Cùng GEOMETRY_MIN_ZOOM (hiện thửa). */
+export const HIGHWAYS_MIN_ZOOM = 16;
+export const HIGHWAYS_MAX_TILE_ZOOM = 16;
 
 export const HCM_CENTER: [number, number] = [106.7009, 10.7769];
 
@@ -50,4 +54,8 @@ export function landParcelsTileUrl(admin?: AdminTileFilter) {
 
 export function qhsddTileUrl(admin?: AdminTileFilter) {
   return wrapMapMvtUrl(appendTileQuery(`${absoluteApiBase()}/tiles/qhsdd/{z}/{x}/{y}`, admin));
+}
+
+export function highwaysTileUrl() {
+  return wrapMapMvtUrl(appendTileQuery(`${absoluteApiBase()}/tiles/highways/{z}/{x}/{y}`));
 }

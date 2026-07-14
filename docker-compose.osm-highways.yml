@@ -1,0 +1,23 @@
+# OSM highways slim — chỉ đường (line). App nối port 5435.
+services:
+  osm_highways_postgis:
+    image: postgis/postgis:17-3.5
+    container_name: osm_highways_postgis
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: osm_highways
+    ports:
+      - '5435:5432'
+    volumes:
+      - osm_highways_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d osm_highways']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  osm_highways_pg_data:
+    external: true
+    name: map_osm_highways_pg_data

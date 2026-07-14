@@ -9,11 +9,15 @@ import {
 } from '../api';
 import {
   HCM_CENTER,
+  HIGHWAYS_LAYER,
+  HIGHWAYS_MAX_TILE_ZOOM,
+  HIGHWAYS_MIN_ZOOM,
   LAND_PARCELS_LAYER,
   LAND_PARCELS_MAX_TILE_ZOOM,
   QHSDD_LAYER,
   QHSDD_MAX_TILE_ZOOM,
   QHSDD_MIN_ZOOM,
+  highwaysTileUrl,
   landParcelsTileUrl,
   qhsddTileUrl,
 } from '../mapTiles';
@@ -230,6 +234,8 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'qhsdd-label', showQhsddLayer);
   setLayerVisibility(map, 'parcel-fill', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'parcel-line', showLandLayers && showParcels && !isSearch);
+  // Non-interactive overlay — no click/mouse handlers registered on this layer.
+  setLayerVisibility(map, 'highways-line', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'search-parcel-line', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'selected-parcel-fill', showLandLayers && showParcels);
@@ -333,6 +339,12 @@ function buildMapStyle(): maplibregl.StyleSpecification {
         minzoom: GEOMETRY_MIN_ZOOM,
         maxzoom: LAND_PARCELS_MAX_TILE_ZOOM,
       },
+      highways: {
+        type: 'vector',
+        tiles: [highwaysTileUrl()],
+        minzoom: HIGHWAYS_MIN_ZOOM,
+        maxzoom: HIGHWAYS_MAX_TILE_ZOOM,
+      },
       'search-parcels': {
         type: 'geojson',
         data: emptyFeatureCollection(),
@@ -422,6 +434,73 @@ function buildMapStyle(): maplibregl.StyleSpecification {
           'line-color': '#14532d',
           'line-opacity': 0.82,
           'line-width': 1,
+        },
+      },
+      // Drawn above parcel fill/outline; click still hits parcel-fill (layer-scoped events).
+      {
+        id: 'highways-line',
+        type: 'line',
+        source: 'highways',
+        'source-layer': HIGHWAYS_LAYER,
+        minzoom: HIGHWAYS_MIN_ZOOM,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'highway'],
+            'motorway',
+            '#1e3a5f',
+            'trunk',
+            '#1e3a5f',
+            'primary',
+            '#334155',
+            'secondary',
+            '#475569',
+            'tertiary',
+            '#64748b',
+            '#94a3b8',
+          ],
+          'line-opacity': 0.9,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            16,
+            [
+              'match',
+              ['get', 'highway'],
+              'motorway',
+              2.4,
+              'trunk',
+              2.2,
+              'primary',
+              1.8,
+              'secondary',
+              1.5,
+              'tertiary',
+              1.3,
+              1,
+            ],
+            18,
+            [
+              'match',
+              ['get', 'highway'],
+              'motorway',
+              4,
+              'trunk',
+              3.5,
+              'primary',
+              3,
+              'secondary',
+              2.4,
+              'tertiary',
+              2,
+              1.4,
+            ],
+          ],
         },
       },
       {

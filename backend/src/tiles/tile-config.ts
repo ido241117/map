@@ -5,6 +5,8 @@ export const LAND_PARCELS_LAYER = 'parcels';
 /** Point centroids + house_no — symbol labels (polygon labels fail on overzoom). */
 export const LAND_PARCELS_HOUSE_LAYER = 'parcel-housenos';
 export const QHSDD_LAYER = 'qhsdd';
+/** OSM road centerlines — MapLibre `source-layer`. */
+export const HIGHWAYS_LAYER = 'highways';
 
 export const MVT_EXTENT = 4096;
 /** Wider buffer reduces hairline gaps at tile seams after ST_AsMVTGeom clipping. */
@@ -17,6 +19,9 @@ export const QHSDD_MIN_ZOOM = 8;
 export const QHSDD_MAX_TILE_ZOOM = 12;
 /** Pre-gen + serve tới z16; MapLibre overzoom z17+ (db.md §9). */
 export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
+/** Cùng ngưỡng hiện thửa đất (GEOMETRY_MIN_ZOOM frontend). */
+export const HIGHWAYS_MIN_ZOOM = 16;
+export const HIGHWAYS_MAX_TILE_ZOOM = 16;
 
 export const HCM_PROVINCE_CODE = '79';
 
@@ -43,10 +48,12 @@ export function tileCacheRoot(): string {
   return path.resolve(process.cwd(), '..', 'data', 'tile-cache');
 }
 
-export type TileKind = 'land-parcels' | 'qhsdd';
+export type TileKind = 'land-parcels' | 'qhsdd' | 'highways';
 
 export function minZoomFor(kind: TileKind): number {
-  return kind === 'land-parcels' ? LAND_PARCELS_MIN_ZOOM : QHSDD_MIN_ZOOM;
+  if (kind === 'land-parcels') return LAND_PARCELS_MIN_ZOOM;
+  if (kind === 'highways') return HIGHWAYS_MIN_ZOOM;
+  return QHSDD_MIN_ZOOM;
 }
 
 /**
@@ -57,6 +64,11 @@ export function simplifyToleranceDeg(z: number, kind: TileKind): number | null {
   if (kind === 'land-parcels') {
     if (z < LAND_PARCELS_MIN_ZOOM) return null;
     // Adjacent parcels share edges — per-feature ST_Simplify opens visible gaps.
+    return 0;
+  }
+
+  if (kind === 'highways') {
+    if (z < HIGHWAYS_MIN_ZOOM) return null;
     return 0;
   }
 

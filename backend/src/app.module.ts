@@ -12,6 +12,7 @@ import { ElasticService } from './search/elastic.service';
 import { ParcelSearchService } from './search/parcel-search.service';
 import { QhsddService } from './parcels/qhsdd.service';
 import { DatabaseService } from './shared/database.service';
+import { OsmDatabaseService } from './shared/osm-database.service';
 import { TilesController } from './tiles/tiles.controller';
 import { TilesService } from './tiles/tiles.service';
 
@@ -26,6 +27,7 @@ import { TilesService } from './tiles/tiles.service';
   controllers: [AuthController, ParcelsController, PropertyBuysController, TilesController],
   providers: [
     DatabaseService,
+    OsmDatabaseService,
     TilesService,
     QhsddService,
     AuthService,

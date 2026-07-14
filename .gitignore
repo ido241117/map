@@ -37,7 +37,8 @@ venv/
 
 # Local data (imports, dumps, excel — not for repo)
 data/
-db-export/
+db-export/*
+!db-export/RESTORE.md
 *.zip
 *.dump
 *.pbf

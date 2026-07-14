@@ -1,5 +1,6 @@
 import {
   HCM_PROVINCE_CODE,
+  HIGHWAYS_LAYER,
   LAND_PARCELS_HOUSE_LAYER,
   LAND_PARCELS_LAYER,
   MVT_BUFFER,
@@ -202,6 +203,38 @@ export function buildQhsddMvtQuery(
   };
 }
 
+/** Slim DB `osm_highways` (OSM_DATABASE_URL) — line centerlines only. */
+export function buildHighwaysMvtQuery(z: number, x: number, y: number): MvtQuery {
+  return {
+    layerName: HIGHWAYS_LAYER,
+    params: [z, x, y],
+    sql: `
+      WITH tile AS (
+        SELECT
+          ST_TileEnvelope($1, $2, $3) AS env_3857,
+          ST_Transform(ST_TileEnvelope($1, $2, $3), 4326) AS env_4326
+      )
+      SELECT ST_AsMVT(mvt_row, '${HIGHWAYS_LAYER}', ${MVT_EXTENT}, 'geom') AS tile
+      FROM (
+        SELECT
+          h.osm_id,
+          h.highway,
+          h.name,
+          h.ref,
+          ST_AsMVTGeom(
+            ST_Transform(h.way, 3857),
+            tile.env_3857,
+            ${MVT_EXTENT},
+            ${MVT_BUFFER},
+            true
+          ) AS geom
+        FROM osm_highways h, tile
+        WHERE h.way && tile.env_4326
+      ) AS mvt_row
+    `,
+  };
+}
+
 export function buildMvtQuery(
   kind: TileKind,
   z: number,
@@ -212,6 +245,9 @@ export function buildMvtQuery(
 ): MvtQuery {
   if (kind === 'land-parcels') {
     return buildLandParcelsMvtQuery(z, x, y, tolerance, admin);
+  }
+  if (kind === 'highways') {
+    return buildHighwaysMvtQuery(z, x, y);
   }
   return buildQhsddMvtQuery(z, x, y, tolerance, admin);
 }

@@ -1,0 +1,24 @@
+# OSM full (osm2pgsql planet_osm_*) — nguồn extract highways.
+# Volume sẵn có: map_osm_pg_data. Không cần chạy hàng ngày sau khi đã extract.
+services:
+  osm_postgis:
+    image: postgis/postgis:17-3.5
+    container_name: osm_hcm_postgis
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: osm_hcm
+    ports:
+      - '5434:5432'
+    volumes:
+      - osm_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d osm_hcm']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  osm_pg_data:
+    external: true
+    name: map_osm_pg_data
