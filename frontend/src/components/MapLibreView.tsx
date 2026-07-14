@@ -20,19 +20,19 @@ import {
   highwaysTileUrl,
   landParcelsTileUrl,
   qhsddTileUrl,
-} from '../mapTiles';
-import { loadMapViewport, saveMapViewport } from '../mapUserSettings';
+} from '../utils/mapTiles';
+import { loadMapViewport, saveMapViewport } from '../utils/mapUserSettings';
 import {
   ensureMapMvtProtocol,
   notifyMapInteractionEnd,
   notifyMapInteractionStart,
   subscribeTileLoaderStatus,
   type TileLoaderStatus,
-} from '../mapTileLoader';
-import { GEOMETRY_MIN_ZOOM, HOUSE_NO_LABEL_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../mapViewport';
-import { isUsableStreetSearchQuery } from '../searchQuery';
-import { parcelEdgeLabelsToGeoJson } from '../parcelEdgeLabels';
-import { extractHouseNo } from '../parcelHouseNo';
+} from '../utils/mapTileLoader';
+import { GEOMETRY_MIN_ZOOM, HOUSE_NO_LABEL_MIN_ZOOM, QHSDD_LABEL_MIN_ZOOM } from '../utils/mapViewport';
+import { isUsableStreetSearchQuery } from '../utils/searchQuery';
+import { parcelEdgeLabelsToGeoJson } from '../utils/parcelEdgeLabels';
+import { extractHouseNo } from '../utils/parcelHouseNo';
 import type { Parcel, ParcelSource } from '../types';
 
 export type MapLibreUpdate = {

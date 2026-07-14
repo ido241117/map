@@ -1,6 +1,6 @@
 import L from 'leaflet';
+import type { Parcel } from '../types';
 import { GEOMETRY_MIN_ZOOM } from './mapViewport';
-import type { Parcel } from './types';
 
 /** Extra margin for API fetch — load slightly beyond the visible screen. */
 export const VIEWPORT_FETCH_PAD = 0.5;

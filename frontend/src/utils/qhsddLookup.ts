@@ -1,4 +1,4 @@
-import type { QhsddZone } from './types';
+import type { QhsddZone } from '../types';
 
 function pointInRing(lng: number, lat: number, ring: number[][]): boolean {
   let inside = false;

@@ -1,4 +1,4 @@
-import type { ParcelSource } from './types';
+import type { ParcelSource } from '../types';
 
 const SETTINGS_KEY = 'map.userSettings.v2';
 const VIEWPORT_KEY = 'map.viewport.v1';

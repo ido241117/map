@@ -3,10 +3,10 @@ import { Alert, AutoComplete, Card, Checkbox, Input, Select, Spin, Typography } 
 import { fetchParcelAddressSuggest, fetchStats, type ParcelQuery } from '../api';
 import { MapLibreView, type MapLibreUpdate } from '../components/MapLibreView';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { TileLoaderStatus } from '../mapTileLoader';
-import { loadMapUserSettings, saveMapUserSettings } from '../mapUserSettings';
+import type { TileLoaderStatus } from '../utils/mapTileLoader';
+import { loadMapUserSettings, saveMapUserSettings } from '../utils/mapUserSettings';
 import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelSource, type Stats } from '../types';
-import { isUsableStreetSearchQuery } from '../searchQuery';
+import { isUsableStreetSearchQuery } from '../utils/searchQuery';
 
 function formatNumber(value: number | string | undefined) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0));

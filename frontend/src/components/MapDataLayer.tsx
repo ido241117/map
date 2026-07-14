@@ -7,7 +7,7 @@ import {
   shouldShowParcelMapOverlay,
   shouldShowQhsddLabels,
   shouldShowQhsddOverlay,
-} from '../mapViewport';
+} from '../utils/mapViewport';
 import {
   boundsContains,
   boundsToQuery,
@@ -20,7 +20,7 @@ import {
   resolveParcelLimit,
   VIEWPORT_FETCH_PAD,
   VIEWPORT_RENDER_PAD,
-} from '../mapViewportCache';
+} from '../utils/mapViewportCache';
 import type { Parcel, ParcelListResponse, QhsddZone } from '../types';
 
 const MARKER_CHUNK = 600;
