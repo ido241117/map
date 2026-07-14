@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../shared/database.service';
-
-export const QHSDD_MIN_ZOOM = 8;
+import { qhsddMinZoom } from '../tiles/tile-config';
 
 type QhsddFilters = {
   minLat?: number;
@@ -23,7 +22,7 @@ export class QhsddService {
     if (
       filters.zoom !== undefined &&
       Number.isFinite(filters.zoom) &&
-      filters.zoom < QHSDD_MIN_ZOOM
+      filters.zoom < qhsddMinZoom()
     ) {
       return { items: [], returned: 0, truncated: false };
     }

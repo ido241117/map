@@ -1,5 +1,9 @@
-/** Zoom ≥ GEOMETRY_MIN_ZOOM → trả geometry_json (MultiPolygon) cho viewport. */
-export const GEOMETRY_MIN_ZOOM = 16;
+import { parcelsGeometryMinZoom } from '../tiles/tile-config';
+
+/** Zoom ≥ PARCELS_GEOMETRY_MIN_ZOOM → trả geometry_json (MultiPolygon) cho viewport. */
+export function geometryMinZoom(): number {
+  return parcelsGeometryMinZoom();
+}
 
 /** Phạm vi tọa độ hợp lệ cho TP.HCM (province_code 79), có margin nhỏ. */
 export const HCM_LAT_MIN = 10.35;
@@ -18,5 +22,5 @@ export function shouldIncludeGeometry(
   if (includeGeometryFlag !== undefined) return includeGeometryFlag;
   if (isSearch) return true;
   if (zoom === undefined || !Number.isFinite(zoom)) return false;
-  return zoom >= GEOMETRY_MIN_ZOOM;
+  return zoom >= geometryMinZoom();
 }

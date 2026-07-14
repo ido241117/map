@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { envInt } from '../env-int';
 
 /** MVT layer names — must match MapLibre `source-layer` in Phase 3. */
 export const LAND_PARCELS_LAYER = 'parcels';
@@ -12,16 +13,36 @@ export const MVT_EXTENT = 4096;
 /** Wider buffer reduces hairline gaps at tile seams after ST_AsMVTGeom clipping. */
 export const MVT_BUFFER = 256;
 
-export const LAND_PARCELS_MIN_ZOOM = 8;
-/** Overview quy hoạch — zoom xa vẫn thấy màu vùng (text riêng ở z≥17). */
-export const QHSDD_MIN_ZOOM = 8;
 /** Phải khớp zoom crawl (`crawl_hcm_qhsdd.py --zoom`). MapLibre overzoom trên mức này. */
 export const QHSDD_MAX_TILE_ZOOM = 12;
 /** Pre-gen + serve tới z16; MapLibre overzoom z17+ (db.md §9). */
 export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
-/** Lớp lộ giới — hiện từ z10 (MapLibre + serve MVT). */
-export const HIGHWAYS_MIN_ZOOM = 10;
 export const HIGHWAYS_MAX_TILE_ZOOM = 16;
+
+/** Serve MVT thửa đất từ zoom này (`LAND_PARCELS_MIN_ZOOM`). */
+export function landParcelsMinZoom(): number {
+  return envInt('LAND_PARCELS_MIN_ZOOM', 8);
+}
+
+/** Hiện lớp thửa đất (ranh geometry) từ zoom này (`PARCELS_GEOMETRY_MIN_ZOOM`). */
+export function parcelsGeometryMinZoom(): number {
+  return envInt('PARCELS_GEOMETRY_MIN_ZOOM', 16);
+}
+
+/** Hiện / load QHSDD từ zoom này (`QHSDD_MIN_ZOOM`). */
+export function qhsddMinZoom(): number {
+  return envInt('QHSDD_MIN_ZOOM', 8);
+}
+
+/** Hiện lớp lộ giới từ zoom này (`HIGHWAYS_MIN_ZOOM`). */
+export function highwaysMinZoom(): number {
+  return envInt('HIGHWAYS_MIN_ZOOM', 10);
+}
+
+/** Hiện số nhà từ zoom này (`HOUSE_NO_LABEL_MIN_ZOOM`). */
+export function houseNoLabelMinZoom(): number {
+  return envInt('HOUSE_NO_LABEL_MIN_ZOOM', 18);
+}
 
 export const HCM_PROVINCE_CODE = '79';
 
@@ -51,9 +72,9 @@ export function tileCacheRoot(): string {
 export type TileKind = 'land-parcels' | 'qhsdd' | 'highways';
 
 export function minZoomFor(kind: TileKind): number {
-  if (kind === 'land-parcels') return LAND_PARCELS_MIN_ZOOM;
-  if (kind === 'highways') return HIGHWAYS_MIN_ZOOM;
-  return QHSDD_MIN_ZOOM;
+  if (kind === 'land-parcels') return landParcelsMinZoom();
+  if (kind === 'highways') return highwaysMinZoom();
+  return qhsddMinZoom();
 }
 
 /**
@@ -62,17 +83,17 @@ export function minZoomFor(kind: TileKind): number {
  */
 export function simplifyToleranceDeg(z: number, kind: TileKind): number | null {
   if (kind === 'land-parcels') {
-    if (z < LAND_PARCELS_MIN_ZOOM) return null;
+    if (z < landParcelsMinZoom()) return null;
     // Adjacent parcels share edges — per-feature ST_Simplify opens visible gaps.
     return 0;
   }
 
   if (kind === 'highways') {
-    if (z < HIGHWAYS_MIN_ZOOM) return null;
+    if (z < highwaysMinZoom()) return null;
     return 0;
   }
 
-  if (z < QHSDD_MIN_ZOOM) return null;
+  if (z < qhsddMinZoom()) return null;
   // Geometry is z12 tile fragments in DB — no per-zoom simplify (changes shapes by zoom).
   return 0;
 }

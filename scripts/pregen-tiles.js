@@ -237,7 +237,7 @@ async function main() {
   console.log(
     `Tổng: ${summary.written} ghi, ${summary.skipped} bỏ qua, ${summary.total} tile, ${(summary.bytes / 1024 / 1024).toFixed(1)} MB`,
   );
-  console.log(`Bật cache runtime: TILE_CACHE_ENABLED=1 trong backend/.env`);
+  console.log(`Bật cache runtime: TILE_CACHE_ENABLED=1 trong .env (repo root)`);
 }
 
 main().catch((error) => {

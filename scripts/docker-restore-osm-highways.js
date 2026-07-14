@@ -136,7 +136,7 @@ function main() {
   printCounts();
 
   console.log('\nXong. Connection: postgres://postgres:postgres@localhost:5435/osm_highways');
-  console.log('Thêm vào backend/.env: OSM_DATABASE_URL=postgres://postgres:postgres@localhost:5435/osm_highways');
+  console.log('Thêm vào .env (repo root): OSM_DATABASE_URL=postgres://postgres:postgres@localhost:5435/osm_highways');
   console.log('Không cần OSM full / map_osm_pg_data trên VPS.');
 }
 

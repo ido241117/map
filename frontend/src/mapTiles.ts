@@ -1,6 +1,7 @@
 import { wrapMapMvtUrl } from './mapTileLoader';
+import { viteEnvInt } from './viteEnvInt';
 
-/** Keep in sync with backend/src/tiles/tile-config.ts */
+/** Keep layer names in sync with backend/src/tiles/tile-config.ts */
 export const LAND_PARCELS_LAYER = 'parcels';
 export const LAND_PARCELS_HOUSE_LAYER = 'parcel-housenos';
 export const QHSDD_LAYER = 'qhsdd';
@@ -9,15 +10,18 @@ export const HIGHWAYS_LAYER = 'highways';
 /** Bust browser HTTP cache when MVT schema/layers change (must match backend MVT_CACHE_SCHEMA). */
 export const MVT_CACHE_SCHEMA = 5;
 
-export const LAND_PARCELS_MIN_ZOOM = 8;
 /** Pre-gen tới z16 — MapLibre overzoom z17+ (db.md §9). */
 export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
-export const QHSDD_MIN_ZOOM = 8;
 /** Khớp crawl QHSDD — MapLibre overzoom, tránh đổi hình khi zoom 13↔14. */
 export const QHSDD_MAX_TILE_ZOOM = 12;
-/** Lớp lộ giới — hiện từ z10. */
-export const HIGHWAYS_MIN_ZOOM = 10;
 export const HIGHWAYS_MAX_TILE_ZOOM = 16;
+
+/** Serve / request MVT thửa đất từ zoom này — khớp backend `LAND_PARCELS_MIN_ZOOM`. */
+export const LAND_PARCELS_MIN_ZOOM = viteEnvInt('LAND_PARCELS_MIN_ZOOM', 8);
+/** Hiện / load QHSDD từ zoom này — khớp backend `QHSDD_MIN_ZOOM`. */
+export const QHSDD_MIN_ZOOM = viteEnvInt('QHSDD_MIN_ZOOM', 8);
+/** Hiện lớp lộ giới từ zoom này — khớp backend `HIGHWAYS_MIN_ZOOM`. */
+export const HIGHWAYS_MIN_ZOOM = viteEnvInt('HIGHWAYS_MIN_ZOOM', 10);
 
 export const HCM_CENTER: [number, number] = [106.7009, 10.7769];
 

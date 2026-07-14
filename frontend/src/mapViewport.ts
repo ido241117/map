@@ -1,9 +1,19 @@
-/** Zoom ≥ GEOMETRY_MIN_ZOOM: hiện ranh thửa (MultiPolygon). Zoom nhỏ hơn: chỉ lớp quy hoạch. */
-export const GEOMETRY_MIN_ZOOM = 16;
-export const QHSDD_MIN_ZOOM = 8;
-export const QHSDD_LABEL_MIN_ZOOM = 16;
-/** Số nhà trên thửa — chỉ hiện khi zoom rất gần; thấp hơn thì ẩn (không render). */
-export const HOUSE_NO_LABEL_MIN_ZOOM = 18;
+import { viteEnvInt } from './viteEnvInt';
+
+/**
+ * Zoom ≥ PARCELS_GEOMETRY_MIN_ZOOM: hiện ranh thửa (MultiPolygon).
+ * Zoom nhỏ hơn: chỉ lớp quy hoạch.
+ * Khớp backend `PARCELS_GEOMETRY_MIN_ZOOM`.
+ */
+export const GEOMETRY_MIN_ZOOM = viteEnvInt('PARCELS_GEOMETRY_MIN_ZOOM', 16);
+
+/** Hiện / load QHSDD — khớp backend `QHSDD_MIN_ZOOM`. */
+export const QHSDD_MIN_ZOOM = viteEnvInt('QHSDD_MIN_ZOOM', 8);
+
+export const QHSDD_LABEL_MIN_ZOOM = viteEnvInt('QHSDD_LABEL_MIN_ZOOM', 16);
+
+/** Số nhà trên thửa — khớp backend `HOUSE_NO_LABEL_MIN_ZOOM`. */
+export const HOUSE_NO_LABEL_MIN_ZOOM = viteEnvInt('HOUSE_NO_LABEL_MIN_ZOOM', 18);
 
 export function shouldShowQhsddOverlay(source: string | undefined, _zoom: number, isSearch: boolean) {
   if (isSearch) return false;
