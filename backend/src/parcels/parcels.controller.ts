@@ -2,18 +2,30 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { Public } from '../auth/public.decorator';
 import { ParcelsService } from './parcels.service';
 import { QhsddService } from './qhsdd.service';
+import { DatabaseService } from '../shared/database.service';
+import { OsmDatabaseService } from '../shared/osm-database.service';
 
 @Controller()
 export class ParcelsController {
   constructor(
     private readonly parcelsService: ParcelsService,
     private readonly qhsddService: QhsddService,
+    private readonly db: DatabaseService,
+    private readonly osmDb: OsmDatabaseService,
   ) {}
 
   @Public()
   @Get('health')
   health() {
-    return { ok: true };
+    return {
+      ok: true,
+      pools: {
+        main: this.db.getPoolStats(),
+        osm: this.osmDb.getPoolStats(),
+      },
+      uvThreadpool: process.env.UV_THREADPOOL_SIZE || null,
+      pid: process.pid,
+    };
   }
 
   @Get('parcels')

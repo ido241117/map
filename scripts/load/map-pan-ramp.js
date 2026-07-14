@@ -18,6 +18,11 @@ const PAN_JITTER_MS = Number(process.env.LOAD_PAN_JITTER_MS || 1000);
 const INCLUDE_QHSDD = process.env.LOAD_INCLUDE_QHSDD !== '0';
 /** Lớp highways mới — mặc định bật (giống UI z16). Tắt: LOAD_INCLUDE_HIGHWAYS=0 */
 const INCLUDE_HIGHWAYS = process.env.LOAD_INCLUDE_HIGHWAYS !== '0';
+/**
+ * Giới hạn fetch song song / pan (0 = burst hết như cũ ~54).
+ * Giống frontend mapTileLoader (idle 6 / moving 3): LOAD_TILE_CONCURRENCY=6
+ */
+const TILE_CONCURRENCY = Math.max(0, Number(process.env.LOAD_TILE_CONCURRENCY || 0) || 0);
 const VIEWPORTS = INCLUDE_HIGHWAYS ? MAP_PAN_VIEWPORTS_WITH_HIGHWAYS : MAP_PAN_VIEWPORTS;
 
 function sleep(ms) {
@@ -53,10 +58,27 @@ async function fetchTile(path) {
   }
 }
 
+async function mapPool(items, concurrency, worker) {
+  if (!concurrency || concurrency >= items.length) {
+    return Promise.all(items.map((item) => worker(item)));
+  }
+  const results = new Array(items.length);
+  let next = 0;
+  async function run() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i]);
+    }
+  }
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, () => run());
+  await Promise.all(runners);
+  return results;
+}
+
 async function panBurst(viewportTiles, withQhsdd) {
   const tiles = withQhsdd ? [...viewportTiles, ...QHSDD_BOOTSTRAP_TILES] : [...viewportTiles];
   const started = performance.now();
-  const results = await Promise.all(tiles.map((path) => fetchTile(path)));
+  const results = await mapPool(tiles, TILE_CONCURRENCY, fetchTile);
   const elapsed = performance.now() - started;
 
   const failures = results.filter((r) => !r.ok).length;
@@ -194,7 +216,7 @@ async function main() {
     console.log(`Smoke OK — highways tile ~${smoke.highwaysBytes} bytes`);
   }
   console.log(
-    `Config: ${DURATION_SEC}s/stage | pan interval ~${PAN_INTERVAL_MS / 1000}s (+0–${PAN_JITTER_MS / 1000}s jitter) | qhsdd=${INCLUDE_QHSDD ? 'on' : 'off'} | highways=${INCLUDE_HIGHWAYS ? 'on' : 'off'}`,
+    `Config: ${DURATION_SEC}s/stage | pan interval ~${PAN_INTERVAL_MS / 1000}s (+0–${PAN_JITTER_MS / 1000}s jitter) | qhsdd=${INCLUDE_QHSDD ? 'on' : 'off'} | highways=${INCLUDE_HIGHWAYS ? 'on' : 'off'} | tileConcurrency=${TILE_CONCURRENCY || 'burst'}`,
   );
   console.log('');
   console.log('Trong lúc chạy: mở Task Manager + docker stats + log backend terminal.');

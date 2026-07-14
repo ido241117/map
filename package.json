@@ -60,7 +60,10 @@
     "build": "npm run build --workspace backend && npm run build --workspace frontend",
     "load:tiles": "node scripts/load/tiles-ramp.js",
     "load:mixed": "node scripts/load/mixed-ramp.js",
-    "load:map-pan": "node scripts/load/map-pan-ramp.js"
+    "load:map-pan": "node scripts/load/map-pan-ramp.js",
+    "pm2:api": "npm run build --workspace backend && pm2 start ecosystem.config.cjs",
+    "pm2:api:reload": "pm2 reload map-api",
+    "pm2:api:stop": "pm2 delete map-api"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.17.0",

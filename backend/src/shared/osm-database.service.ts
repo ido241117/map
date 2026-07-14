@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 import { Pool, QueryResult, QueryResultRow } from 'pg';
+import { createAppPool, poolStats, resolvePoolMax, type PoolStats } from './pg-pool';
 
 function isDbConnectionError(error: unknown) {
   if (!error || typeof error !== 'object') return false;
@@ -13,10 +14,14 @@ function isDbConnectionError(error: unknown) {
 
 @Injectable()
 export class OsmDatabaseService implements OnModuleDestroy {
-  private readonly pool = new Pool({
+  /** OSM_PG_POOL_MAX → PG_POOL_MAX → 10 */
+  private readonly poolMax = resolvePoolMax('OSM_PG_POOL_MAX');
+  private readonly pool: Pool = createAppPool({
+    label: 'osm',
     connectionString:
       process.env.OSM_DATABASE_URL ||
       'postgres://postgres:postgres@localhost:5435/osm_highways',
+    max: this.poolMax,
   });
 
   async query<T extends QueryResultRow = QueryResultRow>(
@@ -33,6 +38,10 @@ export class OsmDatabaseService implements OnModuleDestroy {
       }
       throw error;
     }
+  }
+
+  getPoolStats(): PoolStats {
+    return poolStats(this.pool, this.poolMax);
   }
 
   async onModuleDestroy() {
