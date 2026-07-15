@@ -53,6 +53,44 @@ services:
     volumes:
       - hcm_land_pgadmin_data:/var/lib/pgadmin
 
+  osm_highways_postgis:
+    image: postgis/postgis:17-3.5
+    container_name: osm_highways_postgis
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: osm_highways
+    ports:
+      - '5435:5432'
+    volumes:
+      - osm_highways_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d osm_highways']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: hcm-land-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - '9200:9200'
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fs http://localhost:9200/_cluster/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 volumes:
   hcm_land_pg_data:
   hcm_land_pgadmin_data:
+  osm_highways_pg_data:
+    external: true
+    name: map_osm_highways_pg_data
+  es_data:
