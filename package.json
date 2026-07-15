@@ -7,7 +7,7 @@
     "frontend"
   ],
   "scripts": {
-    "docker:up": "docker compose up -d",
+    "docker:up": "docker compose up -d --remove-orphans",
     "docker:down": "docker compose down",
     "docker:status": "docker compose ps",
     "dev": "npm run dev --workspace backend",

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, AutoComplete, Card, Checkbox, Input, Select, Spin, Typography } from 'antd';
+import { FilterOutlined } from '@ant-design/icons';
+import { Alert, AutoComplete, Badge, Button, Card, Checkbox, Drawer, Input, Select, Spin, Typography } from 'antd';
 import { fetchParcelAddressSuggest, fetchStats, type ParcelQuery } from '../api';
 import { MapLibreView, type MapLibreUpdate } from '../components/MapLibreView';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import type { TileLoaderStatus } from '../utils/mapTileLoader';
 import { loadMapUserSettings, saveMapUserSettings } from '../utils/mapUserSettings';
 import { PARCEL_SOURCE_OPTIONS, isParcelDataSource, type ParcelAddressSuggestion, type ParcelSource, type Stats } from '../types';
@@ -12,7 +14,11 @@ function formatNumber(value: number | string | undefined) {
   return new Intl.NumberFormat('vi-VN').format(Number(value || 0));
 }
 
+const MOBILE_MEDIA_QUERY = '(max-width: 768px)';
+
 export function MapPage() {
+  const isMobile = useMediaQuery(MOBILE_MEDIA_QUERY);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [initialPrefs] = useState(loadMapUserSettings);
   const [dataSource, setDataSource] = useState<ParcelSource>(initialPrefs.dataSource);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -208,88 +214,160 @@ export function MapPage() {
     [suggestions],
   );
 
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.district) count += 1;
+    if (filters.ward) count += 1;
+    if (dataSource !== initialPrefs.dataSource) count += 1;
+    if (!showParcels || !showHighways || !showQhsdd) count += 1;
+    return count;
+  }, [
+    dataSource,
+    filters.district,
+    filters.ward,
+    initialPrefs.dataSource,
+    showHighways,
+    showParcels,
+    showQhsdd,
+  ]);
+
+  const searchField = (
+    <AutoComplete
+      className="map-filter-search"
+      value={searchInput}
+      options={suggestOptions}
+      onSearch={handleSearchInputChange}
+      onChange={handleSearchInputChange}
+      onSelect={handleAddressSelect}
+      notFoundContent={suggestLoading ? <Spin size="small" /> : 'Không có gợi ý'}
+    >
+      <Input
+        allowClear
+        placeholder="Tìm theo tên đường (Enter)..."
+        onPressEnter={(event) => commitSearch(event.currentTarget.value)}
+      />
+    </AutoComplete>
+  );
+
+  const sourceSelect = (
+    <Select
+      className="map-filter-source"
+      value={dataSource}
+      onChange={handleSourceChange}
+      options={PARCEL_SOURCE_OPTIONS}
+    />
+  );
+
+  const adminAndLayerFilters = (
+    <>
+      {!isPropertyBuySource && showsDistrictFilters ? (
+        <>
+          <Select
+            key={`district-${dataSource}`}
+            className="map-filter-district"
+            placeholder="Quận/huyện"
+            value={filters.district ?? ''}
+            loading={!stats}
+            onChange={(value) => updateFilters({ district: value || undefined, ward: undefined })}
+            options={[
+              { value: '', label: 'Tất cả quận/huyện' },
+              ...(stats?.districts.map((item) => ({
+                value: item.district,
+                label: item.district,
+              })) ?? []),
+            ]}
+          />
+          <Select
+            key={`ward-${filters.district ?? '__all__'}`}
+            className="map-filter-ward"
+            placeholder="Phường/xã"
+            value={filters.ward ?? ''}
+            loading={!stats}
+            onChange={(value) => updateFilters({ ward: value || undefined })}
+            options={[
+              { value: '', label: 'Tất cả phường/xã' },
+              ...wards.map((item) => ({
+                value: item.ward,
+                label: item.ward,
+              })),
+            ]}
+          />
+        </>
+      ) : null}
+      {showsQhsddOverlay ? (
+        <div className="map-layer-toggles">
+          <Checkbox checked={showParcels} onChange={(event) => setShowParcels(event.target.checked)}>
+            Thửa đất
+          </Checkbox>
+          <Checkbox checked={showHighways} onChange={(event) => setShowHighways(event.target.checked)}>
+            Lộ giới
+          </Checkbox>
+          <Checkbox
+            checked={effectiveShowQhsdd}
+            disabled={isAddressSearch}
+            onChange={(event) => setShowQhsdd(event.target.checked)}
+          >
+            QHSDD
+          </Checkbox>
+        </div>
+      ) : null}
+    </>
+  );
+
+  const metricsContent =
+    showsQhsddOverlay ? (
+      <>
+        <span>Thửa: <strong>{formatNumber(mapInfo?.visibleParcels ?? 0)}</strong></span>
+        <span>QHSDD: <strong>{formatNumber(mapInfo?.visibleQhsdd ?? 0)}</strong></span>
+        <span>Zoom: <strong>{mapZoom}</strong></span>
+      </>
+    ) : isPropertyBuySource ? (
+      <>
+        <span>Điểm: <strong>{formatNumber(mapInfo?.propertyBuyCount ?? 0)}</strong></span>
+        <span>Zoom: <strong>{mapZoom}</strong></span>
+      </>
+    ) : null;
+
   return (
     <div className="map-page">
       <Card size="small" className="map-filters-card">
-        <div className="map-filters-row">
-          <Select
-            className="map-filter-source"
-            value={dataSource}
-            onChange={handleSourceChange}
-            options={PARCEL_SOURCE_OPTIONS}
-          />
-          <AutoComplete
-            className="map-filter-search"
-            value={searchInput}
-            options={suggestOptions}
-            onSearch={handleSearchInputChange}
-            onChange={handleSearchInputChange}
-            onSelect={handleAddressSelect}
-            notFoundContent={suggestLoading ? <Spin size="small" /> : 'Không có gợi ý'}
-          >
-            <Input
-              allowClear
-              placeholder="Tìm theo tên đường (Enter)..."
-              onPressEnter={(event) => commitSearch(event.currentTarget.value)}
-            />
-          </AutoComplete>
-          {!isPropertyBuySource && showsDistrictFilters ? (
-            <>
-              <Select
-                key={`district-${dataSource}`}
-                className="map-filter-district"
-                placeholder="Quận/huyện"
-                value={filters.district ?? ''}
-                loading={!stats}
-                onChange={(value) => updateFilters({ district: value || undefined, ward: undefined })}
-                options={[
-                  { value: '', label: 'Tất cả quận/huyện' },
-                  ...(stats?.districts.map((item) => ({
-                    value: item.district,
-                    label: item.district,
-                  })) ?? []),
-                ]}
+        {isMobile ? (
+          <div className="map-filters-mobile">
+            {searchField}
+            <Badge count={activeFilterCount} size="small" offset={[-4, 4]}>
+              <Button
+                type="default"
+                className="map-filters-toggle"
+                icon={<FilterOutlined />}
+                aria-label="Mở bộ lọc"
+                onClick={() => setFiltersOpen(true)}
               />
-              <Select
-                key={`ward-${filters.district ?? '__all__'}`}
-                className="map-filter-ward"
-                placeholder="Phường/xã"
-                value={filters.ward ?? ''}
-                loading={!stats}
-                onChange={(value) => updateFilters({ ward: value || undefined })}
-                options={[
-                  { value: '', label: 'Tất cả phường/xã' },
-                  ...wards.map((item) => ({
-                    value: item.ward,
-                    label: item.ward,
-                  })),
-                ]}
-              />
-            </>
-          ) : null}
-          {showsQhsddOverlay ? (
-            <div className="map-layer-toggles">
-              <Checkbox checked={showParcels} onChange={(event) => setShowParcels(event.target.checked)}>
-                Thửa đất
-              </Checkbox>
-              <Checkbox
-                checked={showHighways}
-                onChange={(event) => setShowHighways(event.target.checked)}
-              >
-                Lộ giới
-              </Checkbox>
-              <Checkbox
-                checked={effectiveShowQhsdd}
-                disabled={isAddressSearch}
-                onChange={(event) => setShowQhsdd(event.target.checked)}
-              >
-                QHSDD
-              </Checkbox>
-            </div>
-          ) : null}
-        </div>
+            </Badge>
+          </div>
+        ) : (
+          <div className="map-filters-row">
+            {sourceSelect}
+            {searchField}
+            {adminAndLayerFilters}
+          </div>
+        )}
         {error ? <Alert type="error" message={error} showIcon style={{ marginTop: 12 }} /> : null}
       </Card>
+
+      <Drawer
+        title="Bộ lọc bản đồ"
+        placement="bottom"
+        height="auto"
+        open={isMobile && filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        className="map-filters-drawer"
+        destroyOnClose={false}
+      >
+        <div className="map-filters-drawer-body">
+          {sourceSelect}
+          {adminAndLayerFilters}
+        </div>
+      </Drawer>
 
       <div className="map-container-wrap">
         {!mapReady ? (
@@ -317,22 +395,12 @@ export function MapPage() {
           onReady={() => setMapReady(true)}
           onTileStatus={setTileStatus}
         />
-      </div>
-
-      <div className="map-metrics">
-        {showsQhsddOverlay ? (
-          <>
-            <span>Thửa: <strong>{formatNumber(mapInfo?.visibleParcels ?? 0)}</strong></span>
-            <span>QHSDD: <strong>{formatNumber(mapInfo?.visibleQhsdd ?? 0)}</strong></span>
-            <span>Zoom: <strong>{mapZoom}</strong></span>
-          </>
-        ) : isPropertyBuySource ? (
-          <>
-            <span>Điểm: <strong>{formatNumber(mapInfo?.propertyBuyCount ?? 0)}</strong></span>
-            <span>Zoom: <strong>{mapZoom}</strong></span>
-          </>
+        {isMobile && metricsContent ? (
+          <div className="map-metrics map-metrics--overlay">{metricsContent}</div>
         ) : null}
       </div>
+
+      {!isMobile && metricsContent ? <div className="map-metrics">{metricsContent}</div> : null}
     </div>
   );
 }
