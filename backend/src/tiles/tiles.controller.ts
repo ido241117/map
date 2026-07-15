@@ -7,7 +7,6 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { Public } from '../auth/public.decorator';
 import { parseTileInt, TILE_CACHE_MAX_AGE_SEC } from './tile-config';
 import { TilesService } from './tiles.service';
 
@@ -30,7 +29,7 @@ function sendMvt(res: Response, tile: Buffer) {
   }
   res.set({
     'Content-Type': 'application/vnd.mapbox-vector-tile',
-    'Cache-Control': `public, max-age=${TILE_CACHE_MAX_AGE_SEC}`,
+    'Cache-Control': `private, max-age=${TILE_CACHE_MAX_AGE_SEC}`,
   });
   res.status(200).send(tile);
 }
@@ -39,7 +38,6 @@ function sendMvt(res: Response, tile: Buffer) {
 export class TilesController {
   constructor(private readonly tilesService: TilesService) {}
 
-  @Public()
   @Get('land-parcels/:z/:x/:y')
   async landParcelsTile(
     @Param('z') z: string,
@@ -57,7 +55,6 @@ export class TilesController {
     sendMvt(res, tile);
   }
 
-  @Public()
   @Get('qhsdd/:z/:x/:y')
   async qhsddTile(
     @Param('z') z: string,
@@ -75,7 +72,6 @@ export class TilesController {
     sendMvt(res, tile);
   }
 
-  @Public()
   @Get('highways/:z/:x/:y')
   async highwaysTile(
     @Param('z') z: string,

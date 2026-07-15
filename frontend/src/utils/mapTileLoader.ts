@@ -1,4 +1,5 @@
 import maplibregl from 'maplibre-gl';
+import { getAuthToken } from '../api';
 
 /** Custom scheme so MapLibre routes MVT fetches through our queue + retry. */
 export const MAP_MVT_PROTOCOL = 'mapmvt';
@@ -211,10 +212,15 @@ export function subscribeTileLoaderStatus(listener: (status: TileLoaderStatus) =
 }
 
 async function fetchTileOnce(url: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  const headers = new Headers();
+  const token = getAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
   const response = await fetch(url, {
     method: 'GET',
     signal,
     credentials: 'same-origin',
+    headers,
   });
 
   if (response.status === 204) {
