@@ -67,8 +67,10 @@ export const TILE_CACHE_MAX_AGE_SEC = 86_400;
  * v5: shared tile_parcels CTE so house labels use the same LIMIT set as polygons
  * v6: railway station points (platform centroids) in railways MVT
  * v7: stations moved to frontend GeoJSON (hardcoded L1 names)
+ * v8: metro_plan lines — service=color, layer=route label
+ * v9: metro_plan skips L1/L2 (already drawn separately)
  */
-export const MVT_CACHE_SCHEMA = 7;
+export const MVT_CACHE_SCHEMA = 9;
 
 /** Thư mục pre-gen/cache MVT — mặc định `data/tile-cache` (repo root). */
 export function tileCacheRoot(): string {

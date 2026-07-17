@@ -236,7 +236,11 @@ export function buildHighwaysMvtQuery(z: number, x: number, y: number): MvtQuery
   };
 }
 
-/** Slim DB — railway centerlines (`osm_railways`). Station dots are hardcoded on the frontend. */
+/**
+ * Slim DB — railway centerlines (`osm_railways`).
+ * Station dots: frontend GeoJSON (L1 + quy hoạch).
+ * `service` carries line color for railway='metro_plan' (no schema change).
+ */
 export function buildRailwaysMvtQuery(z: number, x: number, y: number): MvtQuery {
   return {
     layerName: RAILWAYS_LAYER,
@@ -254,6 +258,8 @@ export function buildRailwaysMvtQuery(z: number, x: number, y: number): MvtQuery
           r.railway,
           r.name,
           r.ref,
+          r.service,
+          r.layer,
           ST_AsMVTGeom(
             ST_Transform(r.way, 3857),
             tile.env_3857,

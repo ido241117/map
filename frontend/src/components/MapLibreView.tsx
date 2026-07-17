@@ -1,5 +1,10 @@
 import { useEffect, useRef } from 'react';
-import maplibregl, { type GeoJSONSource, type Map, type MapLayerMouseEvent } from 'maplibre-gl';
+import maplibregl, {
+  type FilterSpecification,
+  type GeoJSONSource,
+  type Map,
+  type MapLayerMouseEvent,
+} from 'maplibre-gl';
 import {
   fetchAdminBounds,
   fetchParcelById,
@@ -28,6 +33,11 @@ import {
 } from '../utils/mapTiles';
 import { loadMapViewport, saveMapViewport } from '../utils/mapUserSettings';
 import { metroLine1StationsGeoJson } from '../constants/metroLine1Stations';
+import { METRO_LINE2_FILTER, METRO_LINE2_INFO } from '../constants/metroLine2';
+import {
+  metroPlanStationsGeoJson,
+  metroPlanTodGeoJson,
+} from '../constants/metroPlan';
 import {
   ensureMapMvtProtocol,
   notifyMapInteractionEnd,
@@ -41,6 +51,7 @@ import { parcelEdgeLabelsToGeoJson } from '../utils/parcelEdgeLabels';
 import { extractHouseNo } from '../utils/parcelHouseNo';
 import type { Parcel, ParcelSource } from '../types';
 
+const METRO_PLAN_FILTER: FilterSpecification = ['==', ['get', 'railway'], 'metro_plan'];
 export type MapLibreUpdate = {
   zoom: number;
   visibleParcels: number;
@@ -131,6 +142,50 @@ function metroStationPopupHtml(props: {
       <span>Tuyến metro số 1 (Bến Thành – Suối Tiên)</span>
       ${order ? `<span>${escapeHtml(order)}</span>` : ''}
       ${levelLabel ? `<span>${escapeHtml(levelLabel)}</span>` : ''}
+    </div>
+  `;
+}
+
+function metroLine2PopupHtml() {
+  const km = METRO_LINE2_INFO.lengthKm.toLocaleString('vi-VN', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  return `
+    <div class="popup metro-line2-popup">
+      <strong>${escapeHtml(METRO_LINE2_INFO.name)}</strong>
+      <span>Dài khoảng ${escapeHtml(km)} km</span>
+      <span>${METRO_LINE2_INFO.stations} nhà ga (${escapeHtml(METRO_LINE2_INFO.stationsDetail)})</span>
+      <span>${escapeHtml(METRO_LINE2_INFO.status)}</span>
+    </div>
+  `;
+}
+
+function metroPlanStationPopupHtml(props: {
+  name?: string;
+  line?: string;
+  route?: string;
+  description?: string;
+}) {
+  const line = props.line?.trim();
+  const route = props.route?.trim();
+  const description = props.description?.trim();
+  return `
+    <div class="popup metro-plan-station-popup">
+      <strong>${escapeHtml(props.name || 'Nhà ga')}</strong>
+      ${line ? `<span>${escapeHtml(line)}</span>` : ''}
+      ${route ? `<span>${escapeHtml(route)}</span>` : ''}
+      ${description && description !== ' ' ? `<span>${escapeHtml(description)}</span>` : ''}
+    </div>
+  `;
+}
+
+function metroPlanLinePopupHtml(props: { name?: string; ref?: string; layer?: string }) {
+  const route = props.layer?.trim() || props.ref?.trim();
+  return `
+    <div class="popup metro-plan-line-popup">
+      <strong>${escapeHtml(props.name || 'Tuyến quy hoạch')}</strong>
+      ${route ? `<span>${escapeHtml(route)}</span>` : ''}
     </div>
   `;
 }
@@ -272,9 +327,17 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'parcel-line', showLandLayers && showParcels && !isSearch);
   // Non-interactive overlays — controlled by separate checkboxes.
   setLayerVisibility(map, 'highways-line', showLandLayers && showHighways);
+  setLayerVisibility(map, 'railways-metro-plan-tod', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-metro-plan-glow', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-metro-plan', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-metro-plan-hit', showLandLayers && showRailways);
   setLayerVisibility(map, 'railways-line', showLandLayers && showRailways);
   setLayerVisibility(map, 'railways-subway-glow', showLandLayers && showRailways);
   setLayerVisibility(map, 'railways-subway', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-l2-glow', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-l2', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-l2-hit', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-metro-plan-station', showLandLayers && showRailways);
   setLayerVisibility(map, 'railways-station', showLandLayers && showRailways);
   setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'search-parcel-line', showLandLayers && showParcels && isSearch);
@@ -463,6 +526,14 @@ function buildMapStyle(opts: {
         type: 'geojson',
         data: metroLine1StationsGeoJson(),
       },
+      'metro-plan-stations': {
+        type: 'geojson',
+        data: metroPlanStationsGeoJson(),
+      },
+      'metro-plan-tod': {
+        type: 'geojson',
+        data: metroPlanTodGeoJson(),
+      },
       'search-parcels': {
         type: 'geojson',
         data: emptyFeatureCollection(),
@@ -628,6 +699,114 @@ function buildMapStyle(opts: {
         },
       },
       {
+        id: 'railways-metro-plan-tod',
+        type: 'fill',
+        source: 'metro-plan-tod',
+        minzoom: RAILWAYS_MIN_ZOOM,
+        layout: {
+          visibility: railwaysVis,
+        },
+        paint: {
+          'fill-color': '#0284c7',
+          'fill-opacity': 0.12,
+        },
+      },
+      {
+        id: 'railways-metro-plan-glow',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: METRO_PLAN_FILTER,
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': ['coalesce', ['get', 'service'], '#64748b'],
+          'line-opacity': 0.22,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0,
+            3,
+            8,
+            4.5,
+            10,
+            5,
+            14,
+            9,
+            18,
+            14,
+          ],
+        },
+      },
+      {
+        id: 'railways-metro-plan',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: METRO_PLAN_FILTER,
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': ['coalesce', ['get', 'service'], '#64748b'],
+          'line-opacity': 0.9,
+          'line-dasharray': [1.2, 1.6],
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0,
+            2.2,
+            8,
+            2.4,
+            10,
+            2.6,
+            14,
+            3,
+            18,
+            4.5,
+          ],
+        },
+      },
+      {
+        id: 'railways-metro-plan-hit',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: METRO_PLAN_FILTER,
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#64748b',
+          'line-opacity': 0,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0,
+            10,
+            10,
+            12,
+            14,
+            16,
+            18,
+            22,
+          ],
+        },
+      },
+      {
         id: 'railways-subway-glow',
         type: 'line',
         source: 'railways',
@@ -646,6 +825,10 @@ function buildMapStyle(opts: {
             'interpolate',
             ['linear'],
             ['zoom'],
+            0,
+            4,
+            8,
+            5,
             10,
             6,
             14,
@@ -674,6 +857,10 @@ function buildMapStyle(opts: {
             'interpolate',
             ['linear'],
             ['zoom'],
+            0,
+            2,
+            8,
+            2.2,
             10,
             2.4,
             14,
@@ -684,12 +871,113 @@ function buildMapStyle(opts: {
         },
       },
       {
+        id: 'railways-l2-glow',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: METRO_LINE2_FILTER,
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#38bdf8',
+          'line-opacity': 0.3,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0,
+            4,
+            8,
+            5,
+            10,
+            6,
+            14,
+            10,
+            18,
+            16,
+          ],
+        },
+      },
+      {
+        id: 'railways-l2',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: METRO_LINE2_FILTER,
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#0284c7',
+          'line-opacity': 0.95,
+          'line-dasharray': [2, 1.4],
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0,
+            2,
+            8,
+            2.1,
+            10,
+            2.2,
+            14,
+            3.6,
+            18,
+            5.5,
+          ],
+        },
+      },
+      {
+        // Vùng click rộng hơn nét vẽ
+        id: 'railways-l2-hit',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: METRO_LINE2_FILTER,
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#0284c7',
+          'line-opacity': 0,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0,
+            12,
+            10,
+            14,
+            14,
+            18,
+            18,
+            24,
+          ],
+        },
+      },
+      {
         id: 'railways-line',
         type: 'line',
         source: 'railways',
         'source-layer': RAILWAYS_LAYER,
         minzoom: RAILWAYS_MIN_ZOOM,
-        filter: ['!=', ['get', 'railway'], 'subway'],
+        filter: [
+          'all',
+          ['!=', ['get', 'railway'], 'subway'],
+          ['!=', ['get', 'railway'], 'metro_plan'],
+          ['!', METRO_LINE2_FILTER],
+        ],
         layout: {
           visibility: railwaysVis,
           'line-cap': 'butt',
@@ -731,6 +1019,26 @@ function buildMapStyle(opts: {
             'interpolate',
             ['linear'],
             ['zoom'],
+            0,
+            [
+              'match',
+              ['get', 'railway'],
+              'rail',
+              1.4,
+              'construction',
+              1.6,
+              1.2,
+            ],
+            8,
+            [
+              'match',
+              ['get', 'railway'],
+              'rail',
+              1.3,
+              'construction',
+              1.5,
+              1.1,
+            ],
             10,
             [
               'match',
@@ -762,6 +1070,32 @@ function buildMapStyle(opts: {
               2.4,
             ],
           ],
+        },
+      },
+      {
+        id: 'railways-metro-plan-station',
+        type: 'circle',
+        source: 'metro-plan-stations',
+        minzoom: RAILWAYS_STATIONS_MIN_ZOOM,
+        layout: {
+          visibility: railwaysVis,
+        },
+        paint: {
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            10,
+            3,
+            14,
+            4.5,
+            18,
+            6,
+          ],
+          'circle-color': ['coalesce', ['get', 'color'], '#64748b'],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.2,
+          'circle-opacity': 0.9,
         },
       },
       {
@@ -1063,6 +1397,52 @@ export function MapLibreView({
         .addTo(map);
     };
 
+    const handleMetroLine2Click = (event: MapLayerMouseEvent) => {
+      event.originalEvent.stopPropagation();
+      popupRef.current?.remove();
+      popupRef.current = new maplibregl.Popup({ maxWidth: '300px', closeOnClick: true })
+        .setLngLat(event.lngLat)
+        .setHTML(metroLine2PopupHtml())
+        .addTo(map);
+    };
+
+    const handleMetroPlanStationClick = (event: MapLayerMouseEvent) => {
+      const feature = event.features?.[0];
+      if (!feature?.geometry || feature.geometry.type !== 'Point') return;
+      const [lng, lat] = feature.geometry.coordinates;
+      const props = feature.properties ?? {};
+      event.originalEvent.stopPropagation();
+      popupRef.current?.remove();
+      popupRef.current = new maplibregl.Popup({ maxWidth: '300px', closeOnClick: true })
+        .setLngLat([lng, lat])
+        .setHTML(
+          metroPlanStationPopupHtml({
+            name: props.name as string | undefined,
+            line: props.line as string | undefined,
+            route: props.route as string | undefined,
+            description: props.description as string | undefined,
+          }),
+        )
+        .addTo(map);
+    };
+
+    const handleMetroPlanLineClick = (event: MapLayerMouseEvent) => {
+      const feature = event.features?.[0];
+      const props = feature?.properties ?? {};
+      event.originalEvent.stopPropagation();
+      popupRef.current?.remove();
+      popupRef.current = new maplibregl.Popup({ maxWidth: '300px', closeOnClick: true })
+        .setLngLat(event.lngLat)
+        .setHTML(
+          metroPlanLinePopupHtml({
+            name: props.name as string | undefined,
+            ref: props.ref as string | undefined,
+            layer: props.layer as string | undefined,
+          }),
+        )
+        .addTo(map);
+    };
+
     const setPointer = (layerId: string, cursor: string) => {
       map.getCanvas().style.cursor = cursor;
     };
@@ -1133,6 +1513,9 @@ export function MapLibreView({
 
     map.on('click', 'property-buy-circles', handlePropertyBuyClick);
     map.on('click', 'railways-station', handleMetroStationClick);
+    map.on('click', 'railways-metro-plan-station', handleMetroPlanStationClick);
+    map.on('click', 'railways-l2-hit', handleMetroLine2Click);
+    map.on('click', 'railways-metro-plan-hit', handleMetroPlanLineClick);
 
     map.on('mouseenter', 'parcel-fill', () => setPointer('parcel-fill', 'pointer'));
     map.on('mouseleave', 'parcel-fill', () => setPointer('parcel-fill', ''));
@@ -1142,10 +1525,32 @@ export function MapLibreView({
     map.on('mouseleave', 'property-buy-circles', () => setPointer('property-buy-circles', ''));
     map.on('mouseenter', 'railways-station', () => setPointer('railways-station', 'pointer'));
     map.on('mouseleave', 'railways-station', () => setPointer('railways-station', ''));
+    map.on('mouseenter', 'railways-metro-plan-station', () =>
+      setPointer('railways-metro-plan-station', 'pointer'),
+    );
+    map.on('mouseleave', 'railways-metro-plan-station', () =>
+      setPointer('railways-metro-plan-station', ''),
+    );
+    map.on('mouseenter', 'railways-l2-hit', () => setPointer('railways-l2-hit', 'pointer'));
+    map.on('mouseleave', 'railways-l2-hit', () => setPointer('railways-l2-hit', ''));
+    map.on('mouseenter', 'railways-metro-plan-hit', () =>
+      setPointer('railways-metro-plan-hit', 'pointer'),
+    );
+    map.on('mouseleave', 'railways-metro-plan-hit', () =>
+      setPointer('railways-metro-plan-hit', ''),
+    );
 
     map.on('click', (event) => {
       const features = map.queryRenderedFeatures(event.point, {
-        layers: ['parcel-fill', 'search-parcel-fill', 'property-buy-circles', 'railways-station'],
+        layers: [
+          'parcel-fill',
+          'search-parcel-fill',
+          'property-buy-circles',
+          'railways-station',
+          'railways-metro-plan-station',
+          'railways-l2-hit',
+          'railways-metro-plan-hit',
+        ],
       });
       if (!features.length) {
         clearSelectedParcel(map);

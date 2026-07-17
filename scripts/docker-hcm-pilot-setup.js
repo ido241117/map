@@ -270,16 +270,11 @@ async function updateMeta(dest, counts) {
     INSERT INTO db_meta (key, value, updated_at)
     VALUES
       ('land_parcels_row_count', $1, now()),
-      ('hcm_qhsdd_row_count', $2, now()),
-      ('synced_from', $3, now())
+      ('hcm_qhsdd_row_count', $2, now())
     ON CONFLICT (key) DO UPDATE
     SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
     `,
-    [
-      String(counts.parcels),
-      String(counts.qhsdd),
-      `${SRC.host}:${SRC.port}/${SRC.database}`,
-    ],
+    [String(counts.parcels), String(counts.qhsdd)],
   );
 }
 

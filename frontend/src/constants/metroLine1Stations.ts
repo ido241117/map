@@ -1,4 +1,4 @@
-/** Metro số 1 Bến Thành – Suối Tiên — tọa độ từ OSM platform, tên hardcode theo thứ tự tuyến. */
+/** Metro số 1 Bến Thành – Suối Tiên — tên + tọa độ ga theo thứ tự tuyến. */
 export type MetroStationLevel = 'elevated' | 'underground';
 
 export type MetroLine1Station = {

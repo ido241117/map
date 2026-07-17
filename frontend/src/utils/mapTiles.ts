@@ -9,7 +9,7 @@ export const HIGHWAYS_LAYER = 'highways';
 export const RAILWAYS_LAYER = 'railways';
 
 /** Bust browser HTTP cache when MVT schema/layers change (must match backend MVT_CACHE_SCHEMA). */
-export const MVT_CACHE_SCHEMA = 5;
+export const MVT_CACHE_SCHEMA = 9;
 
 /** Pre-gen tới z16 — MapLibre overzoom z17+ (db.md §9). */
 export const LAND_PARCELS_MAX_TILE_ZOOM = 16;

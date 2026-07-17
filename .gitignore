@@ -54,7 +54,16 @@ db-export/*
 !scripts/docker-*.sql
 !scripts/wait-elasticsearch.js
 !scripts/extract-osm-highways.js
+!scripts/import-metro-plan.js
+!scripts/dev-app.js
 !docker/
+
+# Local metro plan dump + probe artifacts — not for git
+_metro_plan.json
+_teka_metro.json
+_teka_metro_err.json
+cookie.txt
+z.html
 *.zip
 *.dump
 *.pbf

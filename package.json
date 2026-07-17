@@ -24,6 +24,7 @@
     "db:osm:highways:down": "docker compose -p map-osm-highways -f docker-compose.osm-highways.yml down",
     "db:osm:highways:status": "docker compose -p map-osm-highways -f docker-compose.osm-highways.yml ps",
     "db:osm:highways:extract": "node scripts/extract-osm-highways.js",
+    "db:osm:highways:import-metro-plan": "node scripts/import-metro-plan.js",
     "db:osm:highways:export": "node scripts/docker-export-osm-highways.js",
     "db:osm:highways:restore": "node scripts/docker-restore-osm-highways.js",
     "es:up": "docker compose -f docker-compose.elasticsearch.yml up -d",
@@ -32,7 +33,7 @@
     "docker:up": "docker compose -f docker-compose.postgis.yml up -d --remove-orphans",
     "docker:down": "docker compose -f docker-compose.postgis.yml down",
     "docker:status": "docker compose -f docker-compose.postgis.yml ps",
-    "dev": "npm run dev --workspace backend",
+    "dev": "node scripts/dev-app.js",
     "dev:backend": "npm run dev --workspace backend",
     "dev:frontend": "npm run dev --workspace frontend",
     "build": "npm run build --workspace backend && npm run build --workspace frontend"
