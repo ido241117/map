@@ -39,6 +39,8 @@ venv/
 data/
 db-export/*
 !db-export/RESTORE.md
+# OSM slim dump nhỏ (~17 MB) — track để VPS git pull là restore được
+!db-export/osm_highways.dump
 
 # Local-only tooling (on disk for dev/ops, not pushed to remote)
 /app.js
@@ -57,6 +59,7 @@ db-export/*
 !docker/
 *.zip
 *.dump
+!db-export/osm_highways.dump
 *.pbf
 
 # Crawler / scraper tooling (local only)
