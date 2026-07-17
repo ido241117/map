@@ -236,7 +236,7 @@ export function buildHighwaysMvtQuery(z: number, x: number, y: number): MvtQuery
   };
 }
 
-/** Slim DB — railway centerlines (`osm_railways`). */
+/** Slim DB — railway centerlines (`osm_railways`). Station dots are hardcoded on the frontend. */
 export function buildRailwaysMvtQuery(z: number, x: number, y: number): MvtQuery {
   return {
     layerName: RAILWAYS_LAYER,
@@ -263,6 +263,7 @@ export function buildRailwaysMvtQuery(z: number, x: number, y: number): MvtQuery
           ) AS geom
         FROM osm_railways r, tile
         WHERE r.way && tile.env_4326
+          AND r.railway IS DISTINCT FROM 'platform'
       ) AS mvt_row
     `,
   };

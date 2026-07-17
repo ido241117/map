@@ -44,7 +44,7 @@ export function highwaysMinZoom(): number {
 
 /** Hiện lớp đường sắt từ zoom này (`RAILWAYS_MIN_ZOOM`). */
 export function railwaysMinZoom(): number {
-  return envInt('RAILWAYS_MIN_ZOOM', 10);
+  return envInt('RAILWAYS_MIN_ZOOM', 0);
 }
 
 /** Hiện số nhà từ zoom này (`HOUSE_NO_LABEL_MIN_ZOOM`). */
@@ -65,8 +65,10 @@ export const TILE_CACHE_MAX_AGE_SEC = 86_400;
  * v3: parcel-housenos point layer for reliable labels
  * v4: parcel_id (not id) on house points + buffered centroids + house_no on polys
  * v5: shared tile_parcels CTE so house labels use the same LIMIT set as polygons
+ * v6: railway station points (platform centroids) in railways MVT
+ * v7: stations moved to frontend GeoJSON (hardcoded L1 names)
  */
-export const MVT_CACHE_SCHEMA = 5;
+export const MVT_CACHE_SCHEMA = 7;
 
 /** Thư mục pre-gen/cache MVT — mặc định `data/tile-cache` (repo root). */
 export function tileCacheRoot(): string {

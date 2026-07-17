@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   readonly HIGHWAYS_MIN_ZOOM?: string;
   /** Hiện lớp đường sắt từ zoom này. */
   readonly RAILWAYS_MIN_ZOOM?: string;
+  /** Hiện chấm nhà ga metro L1 từ zoom này. */
+  readonly RAILWAYS_STATIONS_MIN_ZOOM?: string;
 }
 
 interface ImportMeta {

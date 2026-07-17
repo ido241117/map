@@ -25,7 +25,9 @@ export const QHSDD_MIN_ZOOM = viteEnvInt('QHSDD_MIN_ZOOM', 8);
 /** Hiện lớp lộ giới từ zoom này — khớp backend `HIGHWAYS_MIN_ZOOM`. */
 export const HIGHWAYS_MIN_ZOOM = viteEnvInt('HIGHWAYS_MIN_ZOOM', 10);
 /** Hiện lớp đường sắt từ zoom này — khớp backend `RAILWAYS_MIN_ZOOM`. */
-export const RAILWAYS_MIN_ZOOM = viteEnvInt('RAILWAYS_MIN_ZOOM', 10);
+export const RAILWAYS_MIN_ZOOM = viteEnvInt('RAILWAYS_MIN_ZOOM', 0);
+/** Hiện chấm nhà ga metro L1 từ zoom này (`RAILWAYS_STATIONS_MIN_ZOOM`). */
+export const RAILWAYS_STATIONS_MIN_ZOOM = viteEnvInt('RAILWAYS_STATIONS_MIN_ZOOM', 0);
 
 export const HCM_CENTER: [number, number] = [106.7009, 10.7769];
 

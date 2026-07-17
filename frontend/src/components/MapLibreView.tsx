@@ -20,12 +20,14 @@ import {
   RAILWAYS_LAYER,
   RAILWAYS_MAX_TILE_ZOOM,
   RAILWAYS_MIN_ZOOM,
+  RAILWAYS_STATIONS_MIN_ZOOM,
   highwaysTileUrl,
   landParcelsTileUrl,
   qhsddTileUrl,
   railwaysTileUrl,
 } from '../utils/mapTiles';
 import { loadMapViewport, saveMapViewport } from '../utils/mapUserSettings';
+import { metroLine1StationsGeoJson } from '../constants/metroLine1Stations';
 import {
   ensureMapMvtProtocol,
   notifyMapInteractionEnd,
@@ -104,6 +106,31 @@ function propertyBuyPopupHtml(item: {
       <strong>${escapeHtml(item.string || item.address || `Record #${item.record_id}`)}</strong>
       <span>Record: ${item.record_id}</span>
       <span>Tọa độ: ${item.lat.toFixed(6)}, ${item.long.toFixed(6)}</span>
+    </div>
+  `;
+}
+
+function metroStationPopupHtml(props: {
+  name?: string;
+  order?: number;
+  level?: string;
+}) {
+  const levelLabel =
+    props.level === 'underground'
+      ? 'Ga ngầm'
+      : props.level === 'elevated'
+        ? 'Ga trên cao'
+        : null;
+  const order =
+    typeof props.order === 'number' && Number.isFinite(props.order)
+      ? `Ga ${props.order}/14`
+      : null;
+  return `
+    <div class="popup metro-station-popup">
+      <strong>${escapeHtml(props.name || 'Nhà ga')}</strong>
+      <span>Tuyến metro số 1 (Bến Thành – Suối Tiên)</span>
+      ${order ? `<span>${escapeHtml(order)}</span>` : ''}
+      ${levelLabel ? `<span>${escapeHtml(levelLabel)}</span>` : ''}
     </div>
   `;
 }
@@ -246,6 +273,9 @@ function syncLayerVisibility(
   // Non-interactive overlays — controlled by separate checkboxes.
   setLayerVisibility(map, 'highways-line', showLandLayers && showHighways);
   setLayerVisibility(map, 'railways-line', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-subway-glow', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-subway', showLandLayers && showRailways);
+  setLayerVisibility(map, 'railways-station', showLandLayers && showRailways);
   setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'search-parcel-line', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'selected-parcel-fill', showLandLayers && showParcels);
@@ -429,6 +459,10 @@ function buildMapStyle(opts: {
         minzoom: RAILWAYS_MIN_ZOOM,
         maxzoom: RAILWAYS_MAX_TILE_ZOOM,
       },
+      'metro-line1-stations': {
+        type: 'geojson',
+        data: metroLine1StationsGeoJson(),
+      },
       'search-parcels': {
         type: 'geojson',
         data: emptyFeatureCollection(),
@@ -594,11 +628,68 @@ function buildMapStyle(opts: {
         },
       },
       {
+        id: 'railways-subway-glow',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: ['==', ['get', 'railway'], 'subway'],
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#ef4444',
+          'line-opacity': 0.28,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            10,
+            6,
+            14,
+            10,
+            18,
+            16,
+          ],
+        },
+      },
+      {
+        id: 'railways-subway',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        filter: ['==', ['get', 'railway'], 'subway'],
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#dc2626',
+          'line-opacity': 1,
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            10,
+            2.4,
+            14,
+            4,
+            18,
+            6.5,
+          ],
+        },
+      },
+      {
         id: 'railways-line',
         type: 'line',
         source: 'railways',
         'source-layer': RAILWAYS_LAYER,
         minzoom: RAILWAYS_MIN_ZOOM,
+        filter: ['!=', ['get', 'railway'], 'subway'],
         layout: {
           visibility: railwaysVis,
           'line-cap': 'butt',
@@ -611,32 +702,54 @@ function buildMapStyle(opts: {
             'rail',
             '#292524',
             'light_rail',
-            '#44403c',
-            'subway',
-            '#57534e',
+            '#b45309',
             'tram',
-            '#78716c',
+            '#a16207',
+            'construction',
+            '#f97316',
+            'proposed',
+            '#94a3b8',
             '#57534e',
           ],
-          'line-opacity': 0.92,
-          'line-dasharray': [2, 1.2],
+          'line-opacity': [
+            'match',
+            ['get', 'railway'],
+            'proposed',
+            0.55,
+            0.9,
+          ],
+          'line-dasharray': [
+            'match',
+            ['get', 'railway'],
+            'construction',
+            ['literal', [1.5, 1.5]],
+            'proposed',
+            ['literal', [1, 2]],
+            ['literal', [2, 1.2]],
+          ],
           'line-width': [
             'interpolate',
             ['linear'],
             ['zoom'],
-            12,
+            10,
             [
               'match',
               ['get', 'railway'],
               'rail',
-              1.6,
-              'light_rail',
+              1.2,
+              'construction',
               1.4,
-              'subway',
-              1.3,
-              'tram',
-              1.2,
-              1.2,
+              1,
+            ],
+            14,
+            [
+              'match',
+              ['get', 'railway'],
+              'rail',
+              2,
+              'construction',
+              2.2,
+              1.6,
             ],
             18,
             [
@@ -644,15 +757,53 @@ function buildMapStyle(opts: {
               ['get', 'railway'],
               'rail',
               3.2,
-              'light_rail',
-              2.6,
-              'subway',
+              'construction',
+              3.4,
               2.4,
-              'tram',
-              2,
-              2.2,
             ],
           ],
+        },
+      },
+      {
+        id: 'railways-station',
+        type: 'circle',
+        source: 'metro-line1-stations',
+        minzoom: RAILWAYS_STATIONS_MIN_ZOOM,
+        layout: {
+          visibility: railwaysVis,
+        },
+        paint: {
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            11,
+            5,
+            14,
+            7,
+            18,
+            9,
+          ],
+          'circle-color': [
+            'match',
+            ['get', 'level'],
+            'underground',
+            '#dc2626',
+            '#ffffff',
+          ],
+          'circle-stroke-color': '#dc2626',
+          'circle-stroke-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            11,
+            2,
+            14,
+            2.5,
+            18,
+            3,
+          ],
+          'circle-opacity': 0.96,
         },
       },
       {
@@ -893,6 +1044,25 @@ export function MapLibreView({
         .addTo(map);
     };
 
+    const handleMetroStationClick = (event: MapLayerMouseEvent) => {
+      const feature = event.features?.[0];
+      if (!feature?.geometry || feature.geometry.type !== 'Point') return;
+      const [lng, lat] = feature.geometry.coordinates;
+      const props = feature.properties ?? {};
+      event.originalEvent.stopPropagation();
+      popupRef.current?.remove();
+      popupRef.current = new maplibregl.Popup({ maxWidth: '280px', closeOnClick: true })
+        .setLngLat([lng, lat])
+        .setHTML(
+          metroStationPopupHtml({
+            name: props.name as string | undefined,
+            order: Number(props.order),
+            level: props.level as string | undefined,
+          }),
+        )
+        .addTo(map);
+    };
+
     const setPointer = (layerId: string, cursor: string) => {
       map.getCanvas().style.cursor = cursor;
     };
@@ -962,6 +1132,7 @@ export function MapLibreView({
     });
 
     map.on('click', 'property-buy-circles', handlePropertyBuyClick);
+    map.on('click', 'railways-station', handleMetroStationClick);
 
     map.on('mouseenter', 'parcel-fill', () => setPointer('parcel-fill', 'pointer'));
     map.on('mouseleave', 'parcel-fill', () => setPointer('parcel-fill', ''));
@@ -969,10 +1140,12 @@ export function MapLibreView({
     map.on('mouseleave', 'search-parcel-fill', () => setPointer('search-parcel-fill', ''));
     map.on('mouseenter', 'property-buy-circles', () => setPointer('property-buy-circles', 'pointer'));
     map.on('mouseleave', 'property-buy-circles', () => setPointer('property-buy-circles', ''));
+    map.on('mouseenter', 'railways-station', () => setPointer('railways-station', 'pointer'));
+    map.on('mouseleave', 'railways-station', () => setPointer('railways-station', ''));
 
     map.on('click', (event) => {
       const features = map.queryRenderedFeatures(event.point, {
-        layers: ['parcel-fill', 'search-parcel-fill', 'property-buy-circles'],
+        layers: ['parcel-fill', 'search-parcel-fill', 'property-buy-circles', 'railways-station'],
       });
       if (!features.length) {
         clearSelectedParcel(map);
