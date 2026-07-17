@@ -38,7 +38,17 @@ venv/
 # Local data (imports, dumps, excel — not for repo)
 data/
 db-export/*
-!db-export/RESTORE.md
+
+# Local-only tooling (on disk for dev/ops, not pushed to remote)
+/app.js
+/index.html
+/styles.css
+/lib/
+/ecosystem.config.cjs
+/docker/
+/scripts/**
+!scripts/kill-port.ps1
+!scripts/with-uv-threadpool.js
 *.zip
 *.dump
 *.pbf
