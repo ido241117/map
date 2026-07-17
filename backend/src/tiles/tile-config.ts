@@ -8,6 +8,8 @@ export const LAND_PARCELS_HOUSE_LAYER = 'parcel-housenos';
 export const QHSDD_LAYER = 'qhsdd';
 /** OSM road centerlines — MapLibre `source-layer`. */
 export const HIGHWAYS_LAYER = 'highways';
+/** OSM railway centerlines — MapLibre `source-layer`. */
+export const RAILWAYS_LAYER = 'railways';
 
 export const MVT_EXTENT = 4096;
 /** Wider buffer reduces hairline gaps at tile seams after ST_AsMVTGeom clipping. */
@@ -18,6 +20,7 @@ export const QHSDD_MAX_TILE_ZOOM = 12;
 /** Pre-gen + serve tới z16; MapLibre overzoom z17+ (db.md §9). */
 export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
 export const HIGHWAYS_MAX_TILE_ZOOM = 16;
+export const RAILWAYS_MAX_TILE_ZOOM = 16;
 
 /** Serve MVT thửa đất từ zoom này (`LAND_PARCELS_MIN_ZOOM`). */
 export function landParcelsMinZoom(): number {
@@ -37,6 +40,11 @@ export function qhsddMinZoom(): number {
 /** Hiện lớp lộ giới từ zoom này (`HIGHWAYS_MIN_ZOOM`). */
 export function highwaysMinZoom(): number {
   return envInt('HIGHWAYS_MIN_ZOOM', 10);
+}
+
+/** Hiện lớp đường sắt từ zoom này (`RAILWAYS_MIN_ZOOM`). */
+export function railwaysMinZoom(): number {
+  return envInt('RAILWAYS_MIN_ZOOM', 10);
 }
 
 /** Hiện số nhà từ zoom này (`HOUSE_NO_LABEL_MIN_ZOOM`). */
@@ -69,11 +77,16 @@ export function tileCacheRoot(): string {
   return path.resolve(process.cwd(), '..', 'data', 'tile-cache');
 }
 
-export type TileKind = 'land-parcels' | 'qhsdd' | 'highways';
+export type TileKind = 'land-parcels' | 'qhsdd' | 'highways' | 'railways';
+
+export function isOsmTileKind(kind: TileKind): boolean {
+  return kind === 'highways' || kind === 'railways';
+}
 
 export function minZoomFor(kind: TileKind): number {
   if (kind === 'land-parcels') return landParcelsMinZoom();
   if (kind === 'highways') return highwaysMinZoom();
+  if (kind === 'railways') return railwaysMinZoom();
   return qhsddMinZoom();
 }
 
@@ -90,6 +103,11 @@ export function simplifyToleranceDeg(z: number, kind: TileKind): number | null {
 
   if (kind === 'highways') {
     if (z < highwaysMinZoom()) return null;
+    return 0;
+  }
+
+  if (kind === 'railways') {
+    if (z < railwaysMinZoom()) return null;
     return 0;
   }
 

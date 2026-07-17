@@ -46,6 +46,7 @@ export function MapPage() {
   } | null>(null);
   const [showParcels, setShowParcels] = useState(initialPrefs.showParcels);
   const [showHighways, setShowHighways] = useState(initialPrefs.showHighways);
+  const [showRailways, setShowRailways] = useState(initialPrefs.showRailways);
   const [showQhsdd, setShowQhsdd] = useState(initialPrefs.showQhsdd);
 
   useEffect(() => {
@@ -57,6 +58,7 @@ export function MapPage() {
       committedSearch,
       showParcels,
       showHighways,
+      showRailways,
       showQhsdd,
     });
   }, [
@@ -67,6 +69,7 @@ export function MapPage() {
     committedSearch,
     showParcels,
     showHighways,
+    showRailways,
     showQhsdd,
   ]);
 
@@ -219,7 +222,7 @@ export function MapPage() {
     if (filters.district) count += 1;
     if (filters.ward) count += 1;
     if (dataSource !== initialPrefs.dataSource) count += 1;
-    if (!showParcels || !showHighways || !showQhsdd) count += 1;
+    if (!showParcels || !showHighways || !showRailways || !showQhsdd) count += 1;
     return count;
   }, [
     dataSource,
@@ -227,6 +230,7 @@ export function MapPage() {
     filters.ward,
     initialPrefs.dataSource,
     showHighways,
+    showRailways,
     showParcels,
     showQhsdd,
   ]);
@@ -301,6 +305,9 @@ export function MapPage() {
           </Checkbox>
           <Checkbox checked={showHighways} onChange={(event) => setShowHighways(event.target.checked)}>
             Lộ giới
+          </Checkbox>
+          <Checkbox checked={showRailways} onChange={(event) => setShowRailways(event.target.checked)}>
+            Đường sắt
           </Checkbox>
           <Checkbox
             checked={effectiveShowQhsdd}
@@ -389,6 +396,7 @@ export function MapPage() {
           focusTarget={mapFocus}
           showParcels={showParcels}
           showHighways={showHighways}
+          showRailways={showRailways}
           showQhsdd={effectiveShowQhsdd}
           onUpdate={setMapInfo}
           onError={setError}

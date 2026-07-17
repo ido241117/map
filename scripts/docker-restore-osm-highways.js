@@ -62,7 +62,11 @@ function printCounts() {
     '-t',
     '-A',
     '-c',
-    `SELECT 'osm_highways', count(*)::text FROM osm_highways;
+    `SELECT 'osm_highways', count(*)::text FROM osm_highways
+     UNION ALL
+     SELECT 'osm_railways',
+       CASE WHEN to_regclass('public.osm_railways') IS NULL THEN '0'
+            ELSE (SELECT count(*)::text FROM osm_railways) END;
      SELECT pg_size_pretty(pg_database_size('${DB_NAME}'));`,
   ]);
   console.log('Sau restore:');

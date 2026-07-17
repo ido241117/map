@@ -11,6 +11,7 @@ export type MapUserSettings = {
   committedSearch: string;
   showParcels: boolean;
   showHighways: boolean;
+  showRailways: boolean;
   showQhsdd: boolean;
 };
 
@@ -26,6 +27,7 @@ const DEFAULT_SETTINGS: MapUserSettings = {
   committedSearch: '',
   showParcels: false,
   showHighways: false,
+  showRailways: false,
   showQhsdd: false,
 };
 
@@ -58,6 +60,7 @@ export function loadMapUserSettings(): MapUserSettings {
       committedSearch: asString(parsed.committedSearch),
       showParcels: asBoolean(parsed.showParcels, DEFAULT_SETTINGS.showParcels),
       showHighways: asBoolean(parsed.showHighways, DEFAULT_SETTINGS.showHighways),
+      showRailways: asBoolean(parsed.showRailways, DEFAULT_SETTINGS.showRailways),
       showQhsdd: asBoolean(parsed.showQhsdd, DEFAULT_SETTINGS.showQhsdd),
     };
   } catch {

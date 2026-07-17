@@ -17,9 +17,13 @@ import {
   QHSDD_LAYER,
   QHSDD_MAX_TILE_ZOOM,
   QHSDD_MIN_ZOOM,
+  RAILWAYS_LAYER,
+  RAILWAYS_MAX_TILE_ZOOM,
+  RAILWAYS_MIN_ZOOM,
   highwaysTileUrl,
   landParcelsTileUrl,
   qhsddTileUrl,
+  railwaysTileUrl,
 } from '../utils/mapTiles';
 import { loadMapViewport, saveMapViewport } from '../utils/mapUserSettings';
 import {
@@ -52,6 +56,7 @@ type MapLibreViewProps = {
   focusTarget?: { lat: number; lng: number; zoom?: number; key: string } | null;
   showParcels?: boolean;
   showHighways?: boolean;
+  showRailways?: boolean;
   showQhsdd?: boolean;
   onUpdate: (info: MapLibreUpdate) => void;
   onError: (message: string) => void;
@@ -224,6 +229,7 @@ function syncLayerVisibility(
   searchQuery: string,
   showParcels: boolean,
   showHighways: boolean,
+  showRailways: boolean,
   showQhsdd: boolean,
 ) {
   const isSearch = Boolean(searchQuery.trim());
@@ -237,8 +243,9 @@ function syncLayerVisibility(
   setLayerVisibility(map, 'qhsdd-label', showQhsddLayer);
   setLayerVisibility(map, 'parcel-fill', showLandLayers && showParcels && !isSearch);
   setLayerVisibility(map, 'parcel-line', showLandLayers && showParcels && !isSearch);
-  // Non-interactive overlay — controlled by the separate "Lộ giới" checkbox.
+  // Non-interactive overlays — controlled by separate checkboxes.
   setLayerVisibility(map, 'highways-line', showLandLayers && showHighways);
+  setLayerVisibility(map, 'railways-line', showLandLayers && showRailways);
   setLayerVisibility(map, 'search-parcel-fill', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'search-parcel-line', showLandLayers && showParcels && isSearch);
   setLayerVisibility(map, 'selected-parcel-fill', showLandLayers && showParcels);
@@ -295,9 +302,15 @@ function syncTileSources(
   map: Map,
   showParcels: boolean,
   showHighways: boolean,
+  showRailways: boolean,
   showQhsdd: boolean,
   filters: { district?: string; ward?: string },
-  tileUrlCache?: { parcels: string | null; highways: string | null; qhsdd: string | null },
+  tileUrlCache?: {
+    parcels: string | null;
+    highways: string | null;
+    railways: string | null;
+    qhsdd: string | null;
+  },
 ) {
   const admin = adminTileFilter(filters);
   const parcels = map.getSource('parcels') as maplibregl.VectorTileSource | undefined;
@@ -328,6 +341,20 @@ function syncTileSources(
     }
   }
 
+  const railways = map.getSource('railways') as maplibregl.VectorTileSource | undefined;
+  if (railways && typeof railways.setTiles === 'function') {
+    if (showRailways) {
+      const url = railwaysTileUrl();
+      if (tileUrlCache?.railways !== url) {
+        railways.setTiles([url]);
+        if (tileUrlCache) tileUrlCache.railways = url;
+      }
+    } else if (tileUrlCache?.railways !== null) {
+      railways.setTiles([]);
+      if (tileUrlCache) tileUrlCache.railways = null;
+    }
+  }
+
   const qhsdd = map.getSource('qhsdd') as maplibregl.VectorTileSource | undefined;
   if (qhsdd && typeof qhsdd.setTiles === 'function') {
     if (showQhsdd) {
@@ -346,11 +373,13 @@ function syncTileSources(
 function buildMapStyle(opts: {
   showParcels: boolean;
   showHighways: boolean;
+  showRailways: boolean;
   showQhsdd: boolean;
   isSearch: boolean;
   parcelTiles: string[];
   qhsddTiles: string[];
   highwayTiles: string[];
+  railwayTiles: string[];
 }): maplibregl.StyleSpecification {
   const showParcelTiles = opts.showParcels && !opts.isSearch;
   const showSearchParcels = opts.showParcels && opts.isSearch;
@@ -358,6 +387,7 @@ function buildMapStyle(opts: {
   const searchParcelsVis = layerVisibility(showSearchParcels);
   const selectedParcelsVis = layerVisibility(opts.showParcels);
   const highwaysVis = layerVisibility(opts.showHighways);
+  const railwaysVis = layerVisibility(opts.showRailways);
   const qhsddVis = layerVisibility(opts.showQhsdd && !opts.isSearch);
 
   return {
@@ -392,6 +422,12 @@ function buildMapStyle(opts: {
         tiles: opts.highwayTiles,
         minzoom: HIGHWAYS_MIN_ZOOM,
         maxzoom: HIGHWAYS_MAX_TILE_ZOOM,
+      },
+      railways: {
+        type: 'vector',
+        tiles: opts.railwayTiles,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        maxzoom: RAILWAYS_MAX_TILE_ZOOM,
       },
       'search-parcels': {
         type: 'geojson',
@@ -558,6 +594,68 @@ function buildMapStyle(opts: {
         },
       },
       {
+        id: 'railways-line',
+        type: 'line',
+        source: 'railways',
+        'source-layer': RAILWAYS_LAYER,
+        minzoom: RAILWAYS_MIN_ZOOM,
+        layout: {
+          visibility: railwaysVis,
+          'line-cap': 'butt',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'railway'],
+            'rail',
+            '#292524',
+            'light_rail',
+            '#44403c',
+            'subway',
+            '#57534e',
+            'tram',
+            '#78716c',
+            '#57534e',
+          ],
+          'line-opacity': 0.92,
+          'line-dasharray': [2, 1.2],
+          'line-width': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            12,
+            [
+              'match',
+              ['get', 'railway'],
+              'rail',
+              1.6,
+              'light_rail',
+              1.4,
+              'subway',
+              1.3,
+              'tram',
+              1.2,
+              1.2,
+            ],
+            18,
+            [
+              'match',
+              ['get', 'railway'],
+              'rail',
+              3.2,
+              'light_rail',
+              2.6,
+              'subway',
+              2.4,
+              'tram',
+              2,
+              2.2,
+            ],
+          ],
+        },
+      },
+      {
         id: 'search-parcel-fill',
         type: 'fill',
         source: 'search-parcels',
@@ -665,6 +763,7 @@ export function MapLibreView({
   focusTarget = null,
   showParcels = false,
   showHighways = false,
+  showRailways = false,
   showQhsdd = false,
   onUpdate,
   onError,
@@ -683,10 +782,12 @@ export function MapLibreView({
   const searchQueryRef = useRef(searchQuery);
   const showParcelsRef = useRef(showParcels);
   const showHighwaysRef = useRef(showHighways);
+  const showRailwaysRef = useRef(showRailways);
   const showQhsddRef = useRef(showQhsdd);
   const tileUrlCacheRef = useRef({
     parcels: null as string | null,
     highways: null as string | null,
+    railways: null as string | null,
     qhsdd: null as string | null,
   });
 
@@ -699,6 +800,7 @@ export function MapLibreView({
   searchQueryRef.current = searchQuery;
   showParcelsRef.current = showParcels;
   showHighwaysRef.current = showHighways;
+  showRailwaysRef.current = showRailways;
   showQhsddRef.current = showQhsdd;
 
   useEffect(() => {
@@ -715,14 +817,17 @@ export function MapLibreView({
     const admin = adminTileFilter(filtersRef.current);
     const showParcelsInit = showParcelsRef.current;
     const showHighwaysInit = showHighwaysRef.current;
+    const showRailwaysInit = showRailwaysRef.current;
     const showQhsddInit = showQhsddRef.current;
     const isSearchInit = Boolean(searchQueryRef.current.trim());
     const parcelUrl = showParcelsInit && !isSearchInit ? landParcelsTileUrl(admin) : null;
     const qhsddUrl = showQhsddInit && !isSearchInit ? qhsddTileUrl(admin) : null;
     const highwayUrl = showHighwaysInit ? highwaysTileUrl() : null;
+    const railwayUrl = showRailwaysInit ? railwaysTileUrl() : null;
     tileUrlCacheRef.current = {
       parcels: parcelUrl,
       highways: highwayUrl,
+      railways: railwayUrl,
       qhsdd: qhsddUrl,
     };
 
@@ -731,11 +836,13 @@ export function MapLibreView({
       style: buildMapStyle({
         showParcels: showParcelsInit,
         showHighways: showHighwaysInit,
+        showRailways: showRailwaysInit,
         showQhsdd: showQhsddInit,
         isSearch: isSearchInit,
         parcelTiles: parcelUrl ? [parcelUrl] : [],
         qhsddTiles: qhsddUrl ? [qhsddUrl] : [],
         highwayTiles: highwayUrl ? [highwayUrl] : [],
+        railwayTiles: railwayUrl ? [railwayUrl] : [],
       }),
       center: savedView ? [savedView.lng, savedView.lat] : HCM_CENTER,
       zoom: savedView?.zoom ?? 17,
@@ -797,6 +904,7 @@ export function MapLibreView({
         map,
         showParcelsRef.current && !isSearch,
         showHighwaysRef.current,
+        showRailwaysRef.current,
         showQhsddRef.current && !isSearch,
         filtersRef.current,
         tileUrlCacheRef.current,
@@ -807,6 +915,7 @@ export function MapLibreView({
         searchQueryRef.current,
         showParcelsRef.current,
         showHighwaysRef.current,
+        showRailwaysRef.current,
         showQhsddRef.current,
       );
       onReadyRef.current();
@@ -899,11 +1008,12 @@ export function MapLibreView({
     const apply = () => {
       onErrorRef.current('');
       const isSearch = Boolean(searchQuery.trim());
-      syncLayerVisibility(map, dataSource, searchQuery, showParcels, showHighways, showQhsdd);
+      syncLayerVisibility(map, dataSource, searchQuery, showParcels, showHighways, showRailways, showQhsdd);
       syncTileSources(
         map,
         showParcels && !isSearch,
         showHighways,
+        showRailways,
         showQhsdd && !isSearch,
         filters,
         tileUrlCacheRef.current,
@@ -926,7 +1036,7 @@ export function MapLibreView({
       popupRef.current?.remove();
       clearSelectedParcel(map);
     }
-  }, [dataSource, searchQuery, showParcels, showHighways, showQhsdd, filters.district, filters.ward]);
+  }, [dataSource, searchQuery, showParcels, showHighways, showRailways, showQhsdd, filters.district, filters.ward]);
 
   useEffect(() => {
     const map = mapRef.current;

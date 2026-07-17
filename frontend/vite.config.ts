@@ -16,6 +16,7 @@ export default defineConfig({
     'HOUSE_NO_',
     'QHSDD_',
     'HIGHWAYS_',
+    'RAILWAYS_',
   ],
   server: {
     port: 5173,

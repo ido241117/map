@@ -14,6 +14,8 @@ interface ImportMetaEnv {
   readonly QHSDD_LABEL_MIN_ZOOM?: string;
   /** Hiện lớp lộ giới từ zoom này. */
   readonly HIGHWAYS_MIN_ZOOM?: string;
+  /** Hiện lớp đường sắt từ zoom này. */
+  readonly RAILWAYS_MIN_ZOOM?: string;
 }
 
 interface ImportMeta {

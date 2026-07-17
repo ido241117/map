@@ -81,7 +81,13 @@ function printCounts() {
     '-t',
     '-A',
     '-c',
-    `SELECT 'osm_highways', count(*)::text FROM osm_highways;`,
+    `SELECT 'osm_highways',
+       CASE WHEN to_regclass('public.osm_highways') IS NULL THEN '0'
+            ELSE (SELECT count(*)::text FROM osm_highways) END
+     UNION ALL
+     SELECT 'osm_railways',
+       CASE WHEN to_regclass('public.osm_railways') IS NULL THEN '0'
+            ELSE (SELECT count(*)::text FROM osm_railways) END;`,
   ]);
   console.log('Số dòng hiện tại:');
   for (const line of out.split('\n').filter(Boolean)) {
@@ -118,7 +124,7 @@ function main() {
   const sizeMb = (fs.statSync(DUMP_LOCAL).size / (1024 * 1024)).toFixed(1);
   console.log(`\nXong. File: ${DUMP_LOCAL} (${sizeMb} MB)`);
   console.log('Copy osm_highways.dump lên VPS cùng db-export/, rồi: npm run db:osm:highways:restore');
-  console.log('Không cần volume OSM full (map_osm_pg_data).');
+  console.log('Dump gồm osm_highways + osm_railways (nếu đã extract). Không cần volume OSM full.');
 }
 
 main();

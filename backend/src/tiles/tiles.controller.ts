@@ -83,4 +83,16 @@ export class TilesController {
     const tile = await this.tilesService.getMvtTile('highways', coords.z, coords.x, coords.y);
     sendMvt(res, tile);
   }
+
+  @Get('railways/:z/:x/:y')
+  async railwaysTile(
+    @Param('z') z: string,
+    @Param('x') x: string,
+    @Param('y') y: string,
+    @Res() res: Response,
+  ) {
+    const coords = parseCoords(z, x, y);
+    const tile = await this.tilesService.getMvtTile('railways', coords.z, coords.x, coords.y);
+    sendMvt(res, tile);
+  }
 }

@@ -1,4 +1,4 @@
-# OSM highways slim — chỉ đường (line). App nối port 5435.
+# OSM slim — highways + railways (line). App nối port 5435.
 services:
   osm_highways_postgis:
     image: postgis/postgis:17-3.5

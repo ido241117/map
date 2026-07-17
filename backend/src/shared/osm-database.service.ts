@@ -33,7 +33,7 @@ export class OsmDatabaseService implements OnModuleDestroy {
     } catch (error) {
       if (isDbConnectionError(error)) {
         throw new ServiceUnavailableException(
-          'CSDL OSM highways chưa sẵn sàng. Chạy: npm run db:osm:highways:up',
+          'CSDL OSM (highways/railways) chưa sẵn sàng. Chạy: npm run db:osm:highways:up',
         );
       }
       throw error;

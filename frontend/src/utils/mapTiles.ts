@@ -6,6 +6,7 @@ export const LAND_PARCELS_LAYER = 'parcels';
 export const LAND_PARCELS_HOUSE_LAYER = 'parcel-housenos';
 export const QHSDD_LAYER = 'qhsdd';
 export const HIGHWAYS_LAYER = 'highways';
+export const RAILWAYS_LAYER = 'railways';
 
 /** Bust browser HTTP cache when MVT schema/layers change (must match backend MVT_CACHE_SCHEMA). */
 export const MVT_CACHE_SCHEMA = 5;
@@ -15,6 +16,7 @@ export const LAND_PARCELS_MAX_TILE_ZOOM = 16;
 /** Khớp crawl QHSDD — MapLibre overzoom, tránh đổi hình khi zoom 13↔14. */
 export const QHSDD_MAX_TILE_ZOOM = 12;
 export const HIGHWAYS_MAX_TILE_ZOOM = 16;
+export const RAILWAYS_MAX_TILE_ZOOM = 16;
 
 /** Serve / request MVT thửa đất từ zoom này — khớp backend `LAND_PARCELS_MIN_ZOOM`. */
 export const LAND_PARCELS_MIN_ZOOM = viteEnvInt('LAND_PARCELS_MIN_ZOOM', 8);
@@ -22,6 +24,8 @@ export const LAND_PARCELS_MIN_ZOOM = viteEnvInt('LAND_PARCELS_MIN_ZOOM', 8);
 export const QHSDD_MIN_ZOOM = viteEnvInt('QHSDD_MIN_ZOOM', 8);
 /** Hiện lớp lộ giới từ zoom này — khớp backend `HIGHWAYS_MIN_ZOOM`. */
 export const HIGHWAYS_MIN_ZOOM = viteEnvInt('HIGHWAYS_MIN_ZOOM', 10);
+/** Hiện lớp đường sắt từ zoom này — khớp backend `RAILWAYS_MIN_ZOOM`. */
+export const RAILWAYS_MIN_ZOOM = viteEnvInt('RAILWAYS_MIN_ZOOM', 10);
 
 export const HCM_CENTER: [number, number] = [106.7009, 10.7769];
 
@@ -62,4 +66,8 @@ export function qhsddTileUrl(admin?: AdminTileFilter) {
 
 export function highwaysTileUrl() {
   return wrapMapMvtUrl(appendTileQuery(`${absoluteApiBase()}/tiles/highways/{z}/{x}/{y}`));
+}
+
+export function railwaysTileUrl() {
+  return wrapMapMvtUrl(appendTileQuery(`${absoluteApiBase()}/tiles/railways/{z}/{x}/{y}`));
 }

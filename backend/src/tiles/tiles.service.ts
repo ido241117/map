@@ -4,6 +4,7 @@ import { OsmDatabaseService } from '../shared/osm-database.service';
 import { buildMvtQuery, type AdminTileFilter } from './mvt-builder';
 import {
   assertTileCoords,
+  isOsmTileKind,
   minZoomFor,
   simplifyToleranceDeg,
   type TileKind,
@@ -36,8 +37,8 @@ export class TilesService {
     }
 
     const hasAdminFilter = Boolean(admin?.district?.trim() || admin?.ward?.trim());
-    // Highways: no district/ward filter; always cache-friendly.
-    const canCache = tileCacheEnabled() && (kind === 'highways' || !hasAdminFilter);
+    // OSM overlays: no district/ward filter; always cache-friendly.
+    const canCache = tileCacheEnabled() && (isOsmTileKind(kind) || !hasAdminFilter);
     if (canCache) {
       const cached = await readCachedTile(kind, z, x, y);
       if (cached) {
@@ -48,12 +49,12 @@ export class TilesService {
     const { sql, params } = buildMvtQuery(kind, z, x, y, tolerance, admin);
     let tile: Buffer | null | undefined;
     try {
-      const queryDb = kind === 'highways' ? this.osmDb : this.db;
+      const queryDb = isOsmTileKind(kind) ? this.osmDb : this.db;
       const { rows } = await queryDb.query<{ tile: Buffer | null }>(sql, params);
       tile = rows[0]?.tile;
     } catch (error) {
       // Overlay optional — map parcels/QHSDD still work if OSM DB is down.
-      if (kind === 'highways' && error instanceof ServiceUnavailableException) {
+      if (isOsmTileKind(kind) && error instanceof ServiceUnavailableException) {
         return Buffer.alloc(0);
       }
       throw error;

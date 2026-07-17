@@ -1,5 +1,5 @@
 /**
- * Extract highways from full OSM PostGIS (port 5434 / map_osm_pg_data)
+ * Extract highways + railways from full OSM PostGIS (port 5434 / map_osm_pg_data)
  * into slim DB (port 5435 / map_osm_highways_pg_data).
  *
  * Usage:
@@ -7,7 +7,9 @@
  *   npm run db:osm:highways:up     # đích slim
  *   npm run db:osm:highways:extract
  *
- * --force  : xóa bảng osm_highways trên đích rồi restore lại
+ * --force  : xóa bảng trên đích rồi restore lại
+ *
+ * Tạo thiếu từng bảng nếu chưa có (không cần --force khi chỉ thiếu railways).
  */
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
@@ -19,9 +21,58 @@ const SOURCE_CONTAINER = 'osm_hcm_postgis';
 const TARGET_CONTAINER = 'osm_highways_postgis';
 const SOURCE_DB = 'osm_hcm';
 const TARGET_DB = 'osm_highways';
-const EXPORT_TABLE = 'osm_highways_export';
-const FINAL_TABLE = 'osm_highways';
-const DUMP_IN_CONTAINER = '/tmp/osm_highways.dump';
+
+/** @typedef {{ key: string, exportTable: string, finalTable: string, dumpName: string, where: string, selectCols: string, indexes: string[], verifyExtra?: string }} LayerSpec */
+
+/** @type {LayerSpec[]} */
+const LAYERS = [
+  {
+    key: 'highways',
+    exportTable: 'osm_highways_export',
+    finalTable: 'osm_highways',
+    dumpName: 'osm_highways.dump',
+    where: 'highway IS NOT NULL',
+    selectCols: `
+      osm_id,
+      name,
+      highway,
+      ref,
+      z_order,
+      oneway,
+      bridge,
+      tunnel,
+      layer,
+      service,
+      surface,
+      way`,
+    indexes: ['way', 'osm_id', 'highway'],
+    verifyExtra: `
+      COUNT(DISTINCT highway) AS highway_types,
+      (SELECT highway FROM osm_highways GROUP BY highway ORDER BY COUNT(*) DESC LIMIT 1) AS top_highway`,
+  },
+  {
+    key: 'railways',
+    exportTable: 'osm_railways_export',
+    finalTable: 'osm_railways',
+    dumpName: 'osm_railways.dump',
+    where: 'railway IS NOT NULL',
+    selectCols: `
+      osm_id,
+      name,
+      railway,
+      ref,
+      z_order,
+      bridge,
+      tunnel,
+      layer,
+      service,
+      way`,
+    indexes: ['way', 'osm_id', 'railway'],
+    verifyExtra: `
+      COUNT(DISTINCT railway) AS railway_types,
+      (SELECT railway FROM osm_railways GROUP BY railway ORDER BY COUNT(*) DESC LIMIT 1) AS top_railway`,
+  },
+];
 
 const force = process.argv.includes('--force');
 
@@ -85,6 +136,133 @@ function waitHealthy(container, timeoutMs = 120_000) {
   throw new Error(`Timeout chờ ${container} healthy`);
 }
 
+function tableExists(finalTable) {
+  return (
+    dockerExec(TARGET_CONTAINER, [
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      TARGET_DB,
+      '-tAc',
+      `SELECT to_regclass('public.${finalTable}') IS NOT NULL`,
+    ]) === 't'
+  );
+}
+
+function printTableStats(finalTable) {
+  const stats = dockerExecPg(
+    TARGET_CONTAINER,
+    TARGET_DB,
+    `SELECT COUNT(*) AS rows, pg_size_pretty(pg_total_relation_size('${finalTable}')) AS size FROM ${finalTable};`,
+  );
+  console.log(stats);
+}
+
+/**
+ * @param {LayerSpec} layer
+ */
+function extractLayer(layer) {
+  const dumpInContainer = `/tmp/${layer.dumpName}`;
+  const indexSql = layer.indexes
+    .map((col) => {
+      if (col === 'way') {
+        return `CREATE INDEX ${layer.exportTable}_way_idx ON ${layer.exportTable} USING GIST (way);`;
+      }
+      return `CREATE INDEX ${layer.exportTable}_${col}_idx ON ${layer.exportTable} (${col});`;
+    })
+    .join('\n');
+  const renameIndexes = layer.indexes
+    .map((col) => {
+      const suffix = col === 'way' ? 'way_idx' : `${col}_idx`;
+      return `ALTER INDEX IF EXISTS ${layer.exportTable}_${suffix} RENAME TO ${layer.finalTable}_${suffix};`;
+    })
+    .join('\n');
+
+  console.log(`\n=== ${layer.key}: tạo bảng tạm ${layer.exportTable} (${layer.where})…`);
+  dockerExecPg(
+    SOURCE_CONTAINER,
+    SOURCE_DB,
+    `
+    DROP TABLE IF EXISTS ${layer.exportTable};
+    CREATE TABLE ${layer.exportTable} AS
+    SELECT ${layer.selectCols}
+    FROM planet_osm_line
+    WHERE ${layer.where};
+    ${indexSql}
+    ANALYZE ${layer.exportTable};
+    `,
+  );
+
+  console.log(`${layer.key}: pg_dump → file trong container nguồn…`);
+  dockerExec(SOURCE_CONTAINER, [
+    'pg_dump',
+    '-U',
+    'postgres',
+    '-d',
+    SOURCE_DB,
+    '-Fc',
+    '-t',
+    layer.exportTable,
+    '-f',
+    dumpInContainer,
+  ]);
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `osm-${layer.key}-`));
+  const localDump = path.join(tmpDir, layer.dumpName);
+  try {
+    console.log(`${layer.key}: docker cp dump sang đích…`);
+    run('docker', ['cp', `${SOURCE_CONTAINER}:${dumpInContainer}`, localDump]);
+    run('docker', ['cp', localDump, `${TARGET_CONTAINER}:${dumpInContainer}`]);
+
+    console.log(`${layer.key}: CREATE EXTENSION + pg_restore trên đích…`);
+    dockerExecPg(TARGET_CONTAINER, TARGET_DB, 'CREATE EXTENSION IF NOT EXISTS postgis;');
+    dockerExecPg(
+      TARGET_CONTAINER,
+      TARGET_DB,
+      `DROP TABLE IF EXISTS ${layer.finalTable}; DROP TABLE IF EXISTS ${layer.exportTable};`,
+    );
+    dockerExec(TARGET_CONTAINER, [
+      'pg_restore',
+      '-U',
+      'postgres',
+      '-d',
+      TARGET_DB,
+      '--no-owner',
+      '--no-acl',
+      dumpInContainer,
+    ]);
+    dockerExecPg(
+      TARGET_CONTAINER,
+      TARGET_DB,
+      `ALTER TABLE ${layer.exportTable} RENAME TO ${layer.finalTable};
+       ${renameIndexes}
+       ANALYZE ${layer.finalTable};`,
+    );
+
+    console.log(`${layer.key}: dọn bảng/file tạm trên nguồn…`);
+    dockerExecPg(SOURCE_CONTAINER, SOURCE_DB, `DROP TABLE IF EXISTS ${layer.exportTable};`);
+    dockerExec(SOURCE_CONTAINER, ['rm', '-f', dumpInContainer]);
+    dockerExec(TARGET_CONTAINER, ['rm', '-f', dumpInContainer]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  const verify = dockerExecPg(
+    TARGET_CONTAINER,
+    TARGET_DB,
+    `
+    SELECT
+      COUNT(*) AS rows,
+      pg_size_pretty(pg_total_relation_size('${layer.finalTable}')) AS table_size,
+      Find_SRID('public','${layer.finalTable}','way') AS srid
+      ${layer.verifyExtra ? `, ${layer.verifyExtra}` : ''}
+    FROM ${layer.finalTable};
+    `,
+  );
+  console.log(verify);
+}
+
 function main() {
   if (!inspectRunning(SOURCE_CONTAINER)) {
     console.error(`Nguồn ${SOURCE_CONTAINER} chưa chạy. Chạy: npm run db:osm:up`);
@@ -99,131 +277,29 @@ function main() {
   waitHealthy(SOURCE_CONTAINER);
   waitHealthy(TARGET_CONTAINER);
 
-  const existing = dockerExec(TARGET_CONTAINER, [
-    'psql',
-    '-U',
-    'postgres',
-    '-d',
-    TARGET_DB,
-    '-tAc',
-    `SELECT to_regclass('public.${FINAL_TABLE}') IS NOT NULL`,
-  ]);
-  if (existing === 't' && !force) {
-    console.log(`Bảng ${FINAL_TABLE} đã có trên ${TARGET_DB}. Thêm --force để extract lại.`);
-    const stats = dockerExecPg(
-      TARGET_CONTAINER,
-      TARGET_DB,
-      `SELECT COUNT(*) AS rows, pg_size_pretty(pg_total_relation_size('${FINAL_TABLE}')) AS size FROM ${FINAL_TABLE};`,
-    );
-    console.log(stats);
+  /** @type {LayerSpec[]} */
+  const toExtract = [];
+  for (const layer of LAYERS) {
+    const exists = tableExists(layer.finalTable);
+    if (exists && !force) {
+      console.log(`Bảng ${layer.finalTable} đã có trên ${TARGET_DB}. Thêm --force để extract lại.`);
+      printTableStats(layer.finalTable);
+      continue;
+    }
+    toExtract.push(layer);
+  }
+
+  if (toExtract.length === 0) {
+    console.log('\nKhông có lớp nào cần extract.');
     return;
   }
 
-  console.log(`1/5 Tạo bảng tạm ${EXPORT_TABLE} trên nguồn (highway IS NOT NULL)…`);
-  dockerExecPg(
-    SOURCE_CONTAINER,
-    SOURCE_DB,
-    `
-    DROP TABLE IF EXISTS ${EXPORT_TABLE};
-    CREATE TABLE ${EXPORT_TABLE} AS
-    SELECT
-      osm_id,
-      name,
-      highway,
-      ref,
-      z_order,
-      oneway,
-      bridge,
-      tunnel,
-      layer,
-      service,
-      surface,
-      way
-    FROM planet_osm_line
-    WHERE highway IS NOT NULL;
-    CREATE INDEX ${EXPORT_TABLE}_way_idx ON ${EXPORT_TABLE} USING GIST (way);
-    CREATE INDEX ${EXPORT_TABLE}_osm_id_idx ON ${EXPORT_TABLE} (osm_id);
-    CREATE INDEX ${EXPORT_TABLE}_highway_idx ON ${EXPORT_TABLE} (highway);
-    ANALYZE ${EXPORT_TABLE};
-    `,
-  );
-
-  console.log('2/5 pg_dump → file trong container nguồn…');
-  dockerExec(SOURCE_CONTAINER, [
-    'pg_dump',
-    '-U',
-    'postgres',
-    '-d',
-    SOURCE_DB,
-    '-Fc',
-    '-t',
-    EXPORT_TABLE,
-    '-f',
-    DUMP_IN_CONTAINER,
-  ]);
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osm-highways-'));
-  const localDump = path.join(tmpDir, 'osm_highways.dump');
-  try {
-    console.log('3/5 docker cp dump sang đích…');
-    run('docker', ['cp', `${SOURCE_CONTAINER}:${DUMP_IN_CONTAINER}`, localDump]);
-    run('docker', ['cp', localDump, `${TARGET_CONTAINER}:${DUMP_IN_CONTAINER}`]);
-
-    console.log('4/5 CREATE EXTENSION + pg_restore trên đích…');
-    dockerExecPg(TARGET_CONTAINER, TARGET_DB, 'CREATE EXTENSION IF NOT EXISTS postgis;');
-    dockerExecPg(
-      TARGET_CONTAINER,
-      TARGET_DB,
-      `DROP TABLE IF EXISTS ${FINAL_TABLE}; DROP TABLE IF EXISTS ${EXPORT_TABLE};`,
-    );
-    dockerExec(TARGET_CONTAINER, [
-      'pg_restore',
-      '-U',
-      'postgres',
-      '-d',
-      TARGET_DB,
-      '--no-owner',
-      '--no-acl',
-      DUMP_IN_CONTAINER,
-    ]);
-    dockerExecPg(
-      TARGET_CONTAINER,
-      TARGET_DB,
-      `ALTER TABLE ${EXPORT_TABLE} RENAME TO ${FINAL_TABLE};
-       ALTER INDEX IF EXISTS ${EXPORT_TABLE}_way_idx RENAME TO ${FINAL_TABLE}_way_idx;
-       ALTER INDEX IF EXISTS ${EXPORT_TABLE}_osm_id_idx RENAME TO ${FINAL_TABLE}_osm_id_idx;
-       ALTER INDEX IF EXISTS ${EXPORT_TABLE}_highway_idx RENAME TO ${FINAL_TABLE}_highway_idx;
-       ANALYZE ${FINAL_TABLE};`,
-    );
-
-    console.log('5/5 Dọn bảng/file tạm trên nguồn…');
-    dockerExecPg(SOURCE_CONTAINER, SOURCE_DB, `DROP TABLE IF EXISTS ${EXPORT_TABLE};`);
-    dockerExec(SOURCE_CONTAINER, ['rm', '-f', DUMP_IN_CONTAINER]);
-    dockerExec(TARGET_CONTAINER, ['rm', '-f', DUMP_IN_CONTAINER]);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  for (const layer of toExtract) {
+    extractLayer(layer);
   }
 
-  const verify = dockerExecPg(
-    TARGET_CONTAINER,
-    TARGET_DB,
-    `
-    SELECT
-      COUNT(*) AS rows,
-      COUNT(DISTINCT highway) AS highway_types,
-      pg_size_pretty(pg_total_relation_size('${FINAL_TABLE}')) AS table_size,
-      pg_size_pretty(pg_database_size('${TARGET_DB}')) AS db_size,
-      Find_SRID('public','${FINAL_TABLE}','way') AS srid
-    FROM ${FINAL_TABLE};
-    SELECT highway, COUNT(*) AS n
-    FROM ${FINAL_TABLE}
-    GROUP BY highway
-    ORDER BY n DESC
-    LIMIT 10;
-    `,
-  );
-  console.log(verify);
-  console.log('\nXong. App sẽ dùng: postgres://postgres:postgres@localhost:5435/osm_highways');
+  console.log('\nXong. App dùng: postgres://postgres:postgres@localhost:5435/osm_highways');
+  console.log('  → bảng osm_highways + osm_railways');
   console.log('Nguồn full (5434) có thể tắt: npm run db:osm:down');
 }
 

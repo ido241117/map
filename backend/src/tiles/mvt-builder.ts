@@ -6,6 +6,7 @@ import {
   MVT_BUFFER,
   MVT_EXTENT,
   QHSDD_LAYER,
+  RAILWAYS_LAYER,
   TILE_FEATURE_LIMIT,
   type TileKind,
 } from './tile-config';
@@ -235,6 +236,38 @@ export function buildHighwaysMvtQuery(z: number, x: number, y: number): MvtQuery
   };
 }
 
+/** Slim DB — railway centerlines (`osm_railways`). */
+export function buildRailwaysMvtQuery(z: number, x: number, y: number): MvtQuery {
+  return {
+    layerName: RAILWAYS_LAYER,
+    params: [z, x, y],
+    sql: `
+      WITH tile AS (
+        SELECT
+          ST_TileEnvelope($1, $2, $3) AS env_3857,
+          ST_Transform(ST_TileEnvelope($1, $2, $3), 4326) AS env_4326
+      )
+      SELECT ST_AsMVT(mvt_row, '${RAILWAYS_LAYER}', ${MVT_EXTENT}, 'geom') AS tile
+      FROM (
+        SELECT
+          r.osm_id,
+          r.railway,
+          r.name,
+          r.ref,
+          ST_AsMVTGeom(
+            ST_Transform(r.way, 3857),
+            tile.env_3857,
+            ${MVT_EXTENT},
+            ${MVT_BUFFER},
+            true
+          ) AS geom
+        FROM osm_railways r, tile
+        WHERE r.way && tile.env_4326
+      ) AS mvt_row
+    `,
+  };
+}
+
 export function buildMvtQuery(
   kind: TileKind,
   z: number,
@@ -248,6 +281,9 @@ export function buildMvtQuery(
   }
   if (kind === 'highways') {
     return buildHighwaysMvtQuery(z, x, y);
+  }
+  if (kind === 'railways') {
+    return buildRailwaysMvtQuery(z, x, y);
   }
   return buildQhsddMvtQuery(z, x, y, tolerance, admin);
 }
