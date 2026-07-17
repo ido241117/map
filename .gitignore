@@ -45,10 +45,15 @@ db-export/*
 /styles.css
 /lib/
 /ecosystem.config.cjs
-/docker/
 /scripts/**
 !scripts/kill-port.ps1
 !scripts/with-uv-threadpool.js
+# Docker / DB ops scripts — tracked so VPS can pull them
+!scripts/docker-*.js
+!scripts/docker-*.sql
+!scripts/wait-elasticsearch.js
+!scripts/extract-osm-highways.js
+!docker/
 *.zip
 *.dump
 *.pbf
